@@ -1,0 +1,65 @@
+# Function Analysis: test_meaningful_gap_processing
+
+## Metadata
+- **File**: `src/timing/rest_optimizer.zig`
+- **Lines**: 1016-1041 (26 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "meaningful gap processing" {`
+
+## Function Content
+```zig
+test "meaningful gap processing" {
+    const allocator = testing.allocator;
+    var optimizer = RestOptimizer.init(allocator, 480);
+    
+    const time_sig = TimeSignature{
+        .numerator = 4,
+        .denominator = 4,
+        .measure_duration = 1920,
+        .beat_duration = 480,
+    };
+    
+    // Test 120-tick gap (above threshold)
+    const meaningful_gaps = [_]Gap{
+        Gap{
+            .start_time = 1800,
+            .duration = 120, // Above MIN_MEANINGFUL_REST_THRESHOLD (60)
+            .measure_number = 1,
+        },
+    };
+    
+    const rests = try optimizer.optimizeRests(&meaningful_gaps, time_sig);
+    defer allocator.free(rests);
+    
+    // Should generate at least one rest for meaningful gaps
+    try testing.expect(rests.len > 0);
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+meaningful gap processing

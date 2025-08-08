@@ -1,0 +1,105 @@
+# Function Analysis: generateMeasureWithVoices
+
+## Metadata
+- **File**: `src/mxl/generator.zig`
+- **Lines**: 1347-1415 (69 lines)
+- **Type**: function
+- **Visibility**: private
+- **Signature**: `fn generateMeasureWithVoices(`
+
+## Function Content
+```zig
+    fn generateMeasureWithVoices(
+        self: *const Generator,
+        xml_writer: *XmlWriter,
+        notes: []const enhanced_note.EnhancedTimedNote,
+        measure_number: u32,
+        is_first_measure: bool,
+        key_fifths: i8,
+        tempo_bpm: u32,
+    ) !void {
+        // Start measure element
+        try self.note_attr_generator.writeMeasureStart(xml_writer, measure_number);
+
+        // Write attributes for first measure
+        if (is_first_measure) {
+            try self.note_attr_generator.writeCompleteAttributes(xml_writer, measure_number, true, true, key_fifths);
+            // Add tempo marking
+            try self.generateTempoMarking(xml_writer, tempo_bpm);
+        }
+
+        // Group notes by voice for processing
+        var voice_groups = try self.groupNotesByVoice(self.allocator, notes);
+        defer {
+            for (voice_groups.items) |*group| {
+                group.deinit();
+            }
+            voice_groups.deinit();
+        }
+
+        // If no voices, generate a measure rest and return
+        if (voice_groups.items.len == 0) {
+            // Generate a full measure rest
+            const measure_duration = self.divisions * 4; // Whole note duration for 4/4 time
+            try self.generateRestElement(xml_writer, measure_duration);
+            try self.note_attr_generator.writeBarline(xml_writer);
+            try xml_writer.endElement(); // measure
+            return;
+        }
+
+        // Track cumulative duration for backup calculations
+        var cumulative_duration: u32 = 0;
+
+        // Process each voice group in order
+        for (voice_groups.items) |voice_group| {
+            // Insert backup element if this is not the first voice
+            if (cumulative_duration > 0) {
+                try self.generateBackupElement(xml_writer, cumulative_duration);
+                // Reset cumulative duration since we've backed up to start of measure
+                cumulative_duration = 0;
+            }
+
+            // Generate all notes for this voice, detecting chords
+            for (voice_group.notes.items, 0..) |note, i| {
+                // Check if this note is part of a chord (same start_tick as previous note)
+                const is_chord = if (i > 0) blk: {
+                    const prev_note = voice_group.notes.items[i - 1];
+                    break :blk note.base_note.start_tick == prev_note.base_note.start_tick;
+                } else false;
+                
+                try self.generateEnhancedNoteElement(xml_writer, &note, is_chord);
+                cumulative_duration += note.base_note.duration;
+            }
+        }
+
+        // Add barline
+        try self.note_attr_generator.writeBarline(xml_writer);
+
+        // End measure element
+        try xml_writer.endElement(); // measure
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

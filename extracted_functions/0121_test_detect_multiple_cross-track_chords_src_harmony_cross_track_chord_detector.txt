@@ -1,0 +1,65 @@
+# Function Analysis: test_detect_multiple_cross-track_chords
+
+## Metadata
+- **File**: `src/harmony/cross_track_chord_detector.zig`
+- **Lines**: 253-278 (26 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "detect multiple cross-track chords" {`
+
+## Function Content
+```zig
+test "detect multiple cross-track chords" {
+    const allocator = std.testing.allocator;
+    var detector = CrossTrackChordDetector.init(allocator);
+    
+    // Two separate cross-track chords at different times
+    const notes = [_]TimedNote{
+        // First chord at tick 100
+        TimedNote{ .note = 60, .channel = 0, .velocity = 100, .start_tick = 100, .duration = 480, .track = 0 },
+        TimedNote{ .note = 64, .channel = 1, .velocity = 100, .start_tick = 100, .duration = 480, .track = 1 },
+        // Second chord at tick 600
+        TimedNote{ .note = 67, .channel = 0, .velocity = 100, .start_tick = 600, .duration = 480, .track = 0 },
+        TimedNote{ .note = 72, .channel = 1, .velocity = 100, .start_tick = 600, .duration = 480, .track = 1 },
+    };
+    
+    const chords = try detector.detectChordsAcrossTracks(&notes, 10);
+    defer {
+        for (chords) |*chord| {
+            chord.deinit(allocator);
+        }
+        allocator.free(chords);
+    }
+    
+    try std.testing.expect(chords.len == 2);
+    try std.testing.expect(chords[0].start_time == 100);
+    try std.testing.expect(chords[1].start_time == 600);
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+detect multiple cross-track chords

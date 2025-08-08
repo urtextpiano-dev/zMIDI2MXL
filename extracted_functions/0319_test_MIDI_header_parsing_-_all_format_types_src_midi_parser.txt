@@ -1,0 +1,85 @@
+# Function Analysis: test_MIDI_header_parsing_-_all_format_types
+
+## Metadata
+- **File**: `src/midi/parser.zig`
+- **Lines**: 802-847 (46 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "MIDI header parsing - all format types" {`
+
+## Function Content
+```zig
+test "MIDI header parsing - all format types" {
+    // Test Format 0 (single track)
+    {
+        const data = [_]u8{ 
+            0x4D, 0x54, 0x68, 0x64,  // "MThd" magic
+            0x00, 0x00, 0x00, 0x06,  // Length = 6
+            0x00, 0x00,              // Format 0
+            0x00, 0x01,              // 1 track (required for format 0)
+            0x00, 0x60               // 96 ticks per quarter note
+        };
+        
+        const header = try parseMidiHeader(&data);
+        try std.testing.expectEqual(MidiFormat.single_track, header.format);
+        try std.testing.expectEqual(@as(u16, 1), header.track_count);
+    }
+    
+    // Test Format 1 (multi-track synchronous)
+    {
+        const data = [_]u8{ 
+            0x4D, 0x54, 0x68, 0x64,  // "MThd" magic
+            0x00, 0x00, 0x00, 0x06,  // Length = 6
+            0x00, 0x01,              // Format 1
+            0x00, 0x02,              // 2 tracks
+            0x00, 0x60               // 96 ticks per quarter note
+        };
+        
+        const header = try parseMidiHeader(&data);
+        try std.testing.expectEqual(MidiFormat.multi_track_sync, header.format);
+        try std.testing.expectEqual(@as(u16, 2), header.track_count);
+    }
+    
+    // Test Format 2 (multi-track asynchronous)
+    {
+        const data = [_]u8{ 
+            0x4D, 0x54, 0x68, 0x64,  // "MThd" magic
+            0x00, 0x00, 0x00, 0x06,  // Length = 6
+            0x00, 0x02,              // Format 2
+            0x00, 0x04,              // 4 tracks
+            0x00, 0x60               // 96 ticks per quarter note
+        };
+        
+        const header = try parseMidiHeader(&data);
+        try std.testing.expectEqual(MidiFormat.multi_track_async, header.format);
+        try std.testing.expectEqual(@as(u16, 4), header.track_count);
+    }
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+MIDI header parsing - all format types

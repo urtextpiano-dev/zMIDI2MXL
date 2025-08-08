@@ -1,0 +1,121 @@
+# Function Analysis: generateReport
+
+## Metadata
+- **File**: `src/verbose_logger.zig`
+- **Lines**: 777-861 (85 lines)
+- **Type**: function
+- **Visibility**: public
+- **Signature**: `pub fn generateReport(self: *const StepRegistry, writer: anytype) !void {`
+
+## Function Content
+```zig
+    pub fn generateReport(self: *const StepRegistry, writer: anytype) !void {
+        // Use @constCast for thread-safe access to the mutex
+        const self_mut = @constCast(self);
+        self_mut.mutex.lock();
+        defer self_mut.mutex.unlock();
+        
+        // Calculate stats directly here to avoid deadlock
+        var stats = ExecutionStats{};
+        
+        var iterator = self.executed_steps.iterator();
+        while (iterator.next()) |entry| {
+            const execution = entry.value_ptr.*;
+            
+            if (execution.executed) {
+                stats.executed_count += 1;
+                if (execution.is_required) {
+                    stats.required_executed += 1;
+                } else {
+                    stats.optional_executed += 1;
+                }
+                
+                stats.total_execution_time_ns += execution.duration_ns;
+                if (execution.duration_ns > stats.longest_step_duration_ns) {
+                    stats.longest_step_duration_ns = execution.duration_ns;
+                    stats.longest_step = entry.key_ptr.*;
+                }
+            } else {
+                stats.failed_count += 1;
+                if (execution.is_required) {
+                    stats.required_failed += 1;
+                } else {
+                    stats.optional_failed += 1;
+                }
+            }
+        }
+        
+        try writer.print("\n", .{});
+        try writer.print("╔═══════════════════════════════════════════════════════════════════╗\n", .{});
+        try writer.print("║                     PIPELINE EXECUTION REPORT                    ║\n", .{});
+        try writer.print("╚═══════════════════════════════════════════════════════════════════╝\n", .{});
+        try writer.print("\n", .{});
+        
+        try writer.print("EXECUTION SUMMARY:\n", .{});
+        try writer.print("  Steps executed: {} / {}\n", .{ stats.executed_count, stats.executed_count + stats.failed_count });
+        try writer.print("  Success rate: {d:.1}%\n", .{ stats.getSuccessRate() * 100.0 });
+        try writer.print("  Required steps: {} executed, {} failed\n", .{ stats.required_executed, stats.required_failed });
+        try writer.print("  Optional steps: {} executed, {} failed\n", .{ stats.optional_executed, stats.optional_failed });
+        try writer.print("  Total execution time: {d:.2}ms\n", .{ @as(f64, @floatFromInt(stats.total_execution_time_ns)) / 1_000_000.0 });
+        
+        if (stats.longest_step) |longest| {
+            try writer.print("  Longest step: {s} ({d:.2}ms)\n", .{ 
+                longest.getDescription(), 
+                @as(f64, @floatFromInt(stats.longest_step_duration_ns)) / 1_000_000.0 
+            });
+        }
+        
+        if (stats.failed_count > 0) {
+            try writer.print("\nFAILED STEPS:\n", .{});
+            var failed_iterator = self.executed_steps.iterator();
+            while (failed_iterator.next()) |entry| {
+                const step = entry.key_ptr.*;
+                const execution = entry.value_ptr.*;
+                
+                if (!execution.executed) {
+                    var buf: [32]u8 = undefined;
+                    const step_id = try step.format(&buf);
+                    try writer.print("  {s} {s}", .{ step_id, step.getDescription() });
+                    if (execution.error_info) |error_msg| {
+                        try writer.print(" - {s}", .{error_msg});
+                    }
+                    try writer.print("\n", .{});
+                }
+            }
+        }
+        
+        try writer.print("\n", .{});
+        
+        if (stats.allRequiredExecuted()) {
+            try writer.print("✅ All required pipeline steps completed successfully\n", .{});
+        } else {
+            try writer.print("❌ Some required pipeline steps failed\n", .{});
+        }
+        
+        try writer.print("\n", .{});
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

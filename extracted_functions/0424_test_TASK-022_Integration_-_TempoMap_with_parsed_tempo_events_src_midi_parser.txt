@@ -1,0 +1,100 @@
+# Function Analysis: test_TASK-022_Integration_-_TempoMap_with_parsed_tempo_events
+
+## Metadata
+- **File**: `src/midi/parser.zig`
+- **Lines**: 3606-3666 (61 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "TASK-022 Integration - TempoMap with parsed tempo events" {`
+
+## Function Content
+```zig
+test "TASK-022 Integration - TempoMap with parsed tempo events" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    
+    // Create track data with multiple tempo changes
+    const track_data = [_]u8{
+        0x00,                     // Delta time: 0
+        0xFF, 0x51, 0x03,         // Set Tempo meta event
+        0x07, 0xA1, 0x20,         // Tempo: 120 BPM (500,000 μs)
+        
+        0x60,                     // Delta time: 96 ticks
+        0xFF, 0x51, 0x03,         // Set Tempo meta event  
+        0x06, 0x1A, 0x80,         // Tempo: 150 BPM (400,000 μs)
+        
+        0x60,                     // Delta time: 96 ticks (total 192)
+        0xFF, 0x51, 0x03,         // Set Tempo meta event
+        0x09, 0x27, 0xC0,         // Tempo: 100 BPM (600,000 μs)
+        
+        0x00,                     // Delta time: 0
+        0xFF, 0x2F, 0x00,         // End of track
+    };
+    
+    // Parse the track to extract tempo events
+    const result = try parseTrackEvents(allocator, &track_data);
+    defer {
+        var mutable_result = result;
+        mutable_result.deinit(allocator);
+    }
+    
+    // Verify we got the tempo events
+    try std.testing.expectEqual(@as(usize, 3), result.tempo_events.items.len);
+    
+    // Create tempo map from parsed events
+    var tempo_map = TempoMap.init(allocator, 96);
+    defer tempo_map.deinit();
+    
+    try tempo_map.buildFromEvents(result.tempo_events.items);
+    
+    // Verify tempo map functionality  
+    // Should have 3 events total (since first event starts at tick 0, no default needed)
+    try std.testing.expectEqual(@as(usize, 3), tempo_map.tempo_events.items.len);
+    
+    // Test absolute time calculations across tempo changes
+    try std.testing.expectEqual(@as(u64, 0), tempo_map.getAbsoluteTimeMicroseconds(0));
+    try std.testing.expectEqual(@as(u64, 500_000), tempo_map.getAbsoluteTimeMicroseconds(96));    // 1 quarter at 120 BPM
+    try std.testing.expectEqual(@as(u64, 900_000), tempo_map.getAbsoluteTimeMicroseconds(192));   // + 1 quarter at 150 BPM
+    try std.testing.expectEqual(@as(u64, 1_500_000), tempo_map.getAbsoluteTimeMicroseconds(288)); // + 1 quarter at 100 BPM
+    
+    // Test note duration calculation spanning tempo change
+    const note_duration = tempo_map.getNoteDurationMicroseconds(48, 144); // Spans tempo change at 96
+    // 48 ticks at 120 BPM = 250,000 μs
+    // 48 ticks at 150 BPM = 200,000 μs  
+    // Total = 450,000 μs
+    try std.testing.expectEqual(@as(u64, 450_000), note_duration);
+    
+    // Test tempo lookup
+    try std.testing.expectEqual(@as(u32, 500_000), tempo_map.getTempoAtTick(50));  // 120 BPM
+    try std.testing.expectEqual(@as(u32, 400_000), tempo_map.getTempoAtTick(150)); // 150 BPM
+    try std.testing.expectEqual(@as(u32, 600_000), tempo_map.getTempoAtTick(250)); // 100 BPM
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+TASK-022 Integration - TempoMap with parsed tempo events

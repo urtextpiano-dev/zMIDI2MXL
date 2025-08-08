@@ -1,0 +1,88 @@
+# Function Analysis: benchmarkVoiceAllocation
+
+## Metadata
+- **File**: `src/voice_allocation.zig`
+- **Lines**: 278-329 (52 lines)
+- **Type**: function
+- **Visibility**: public
+- **Signature**: `pub fn benchmarkVoiceAllocation(allocator: std.mem.Allocator, note_count: usize) !void {`
+
+## Function Content
+```zig
+pub fn benchmarkVoiceAllocation(allocator: std.mem.Allocator, note_count: usize) !void {
+    const start_time = std.time.nanoTimestamp();
+    
+    // Generate test data
+    const notes = try allocator.alloc(timing.TimedNote, note_count);
+    defer allocator.free(notes);
+    
+    var prng = std.Random.DefaultPrng.init(@intCast(std.time.timestamp()));
+    const random = prng.random();
+    
+    // Generate random overlapping notes with controlled overlap
+    var current_tick: u32 = 0;
+    for (notes, 0..) |*note, i| {
+        note.* = timing.TimedNote{
+            .note = random.intRangeAtMost(u8, 48, 72), // C3 to C5
+            .channel = 0,
+            .velocity = 64,
+            .start_tick = current_tick,
+            .duration = random.intRangeAtMost(u32, 120, 480), // Shorter durations to avoid too many overlaps
+            .tied_to_next = false,
+            .tied_from_previous = false,
+        };
+        // Advance time with controlled overlap
+        // Every 3rd note starts later to avoid too many simultaneous notes
+        if (i % 3 == 0) {
+            current_tick += random.intRangeAtMost(u32, 500, 960);
+        } else {
+            current_tick += random.intRangeAtMost(u32, 60, 240);
+        }
+    }
+    
+    // Run allocation
+    var allocator_instance = VoiceAllocator.init(allocator);
+    defer allocator_instance.deinit();
+    
+    const voiced_notes = try allocator_instance.assignVoices(notes);
+    defer allocator.free(voiced_notes);
+    
+    const end_time = std.time.nanoTimestamp();
+    const elapsed_ns = @as(u64, @intCast(end_time - start_time));
+    const elapsed_ms = @as(f64, @floatFromInt(elapsed_ns)) / 1_000_000.0;
+    
+    std.debug.print("Voice allocation benchmark:\n", .{});
+    std.debug.print("  Notes: {}\n", .{note_count});
+    std.debug.print("  Time: {d:.3}ms\n", .{elapsed_ms});
+    std.debug.print("  Per note: {d:.3}µs\n", .{elapsed_ms * 1000.0 / @as(f64, @floatFromInt(note_count))});
+    
+    // Verify O(n log n) complexity
+    const expected_ops = @as(f64, @floatFromInt(note_count)) * std.math.log2(@as(f64, @floatFromInt(note_count)));
+    const ns_per_op = @as(f64, @floatFromInt(elapsed_ns)) / expected_ops;
+    std.debug.print("  Time per operation: {d:.3}ns\n", .{ns_per_op});
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

@@ -1,0 +1,124 @@
+# Function Analysis: generateChordGroup
+
+## Metadata
+- **File**: `src/mxl/generator.zig`
+- **Lines**: 1620-1707 (88 lines)
+- **Type**: function
+- **Visibility**: public
+- **Signature**: `pub fn generateChordGroup(`
+
+## Function Content
+```zig
+    pub fn generateChordGroup(
+        self: *const Generator,
+        xml_writer: *XmlWriter,
+        chord_group: chord_detector.ChordGroup,
+        is_enhanced: bool,
+    ) !void {
+        if (chord_group.notes.len == 0) return;
+        
+        // First note in chord is written normally (establishes duration/voice)
+        if (is_enhanced) {
+            // Convert first note to enhanced note for generation
+            const first_enhanced = enhanced_note.EnhancedTimedNote.init(chord_group.notes[0], null);
+            try self.generateEnhancedNoteElement(xml_writer, &first_enhanced, false);
+        } else {
+            const first_note = chord_group.notes[0];
+            // Calculate staff assignment individually for first note
+            const staff_number = @import("note_attributes.zig").getStaffForNote(first_note.note);
+            try self.generateNoteElementWithAttributes(
+                xml_writer,
+                first_note.note,
+                first_note.duration,
+                false, // not a rest
+                1, // default voice
+                staff_number
+            );
+        }
+        
+        // Remaining notes in chord need <chord/> element
+        for (chord_group.notes[1..]) |note| {
+            try xml_writer.startElement("note", null);
+            
+            // CRITICAL: <chord/> element indicates this note is simultaneous with previous
+            try xml_writer.writeEmptyElement("chord", null);
+            
+            // Generate pitch
+            const pitch = midiToPitch(note.note);
+            try xml_writer.startElement("pitch", null);
+            try xml_writer.writeElement("step", pitch.step, null);
+            
+            if (pitch.alter != 0) {
+                var alter_buf: [8]u8 = undefined;
+                const alter_str = try std.fmt.bufPrint(&alter_buf, "{d}", .{pitch.alter});
+                try xml_writer.writeElement("alter", alter_str, null);
+            }
+            
+            var octave_buf: [8]u8 = undefined;
+            const octave_str = try std.fmt.bufPrint(&octave_buf, "{d}", .{pitch.octave});
+            try xml_writer.writeElement("octave", octave_str, null);
+            
+            try xml_writer.endElement(); // pitch
+            
+            // Duration (must match first note in chord)
+            // TIMING-2.3 FIX: Convert MIDI ticks to MusicXML divisions
+            const duration_in_divisions = if (self.division_converter) |converter| blk: {
+                const converted = try converter.convertTicksToDivisions(note.duration);
+                break :blk converted;
+            } else note.duration;
+            
+            var duration_buf: [32]u8 = undefined;
+            const duration_str = try std.fmt.bufPrint(&duration_buf, "{d}", .{duration_in_divisions});
+            try xml_writer.writeElement("duration", duration_str, null);
+            
+            // Staff assignment - calculate individually for each note
+            const staff_number = @import("note_attributes.zig").getStaffForNote(note.note);
+            
+            // Voice with piano convention mapping
+            const raw_voice = if (note.voice > 0) note.voice else 1;
+            const mapped_voice = @import("note_attributes.zig").mapVoiceForPiano(raw_voice, staff_number);
+            var voice_buf: [8]u8 = undefined;
+            const voice_str = try std.fmt.bufPrint(&voice_buf, "{d}", .{mapped_voice});
+            try xml_writer.writeElement("voice", voice_str, null);
+            
+            // Type
+            const note_type = try self.determineNoteType(duration_in_divisions);
+            try xml_writer.writeElement("type", note_type, null);
+            
+            // Staff element
+            var staff_buf: [8]u8 = undefined;
+            const staff_str = try std.fmt.bufPrint(&staff_buf, "{d}", .{staff_number});
+            try xml_writer.writeElement("staff", staff_str, null);
+            
+            // Stem direction (should match first note)
+            const stem_dir = stem_direction.StemDirectionCalculator.calculateVoiceAwareStemDirection(note.note, 1);
+            try xml_writer.writeElement("stem", stem_dir.toMusicXML(), null);
+            
+            try xml_writer.endElement(); // note
+        }
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

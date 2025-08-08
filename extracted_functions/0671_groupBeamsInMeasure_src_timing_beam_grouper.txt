@@ -1,0 +1,140 @@
+# Function Analysis: groupBeamsInMeasure
+
+## Metadata
+- **File**: `src/timing/beam_grouper.zig`
+- **Lines**: 185-288 (104 lines)
+- **Type**: function
+- **Visibility**: public
+- **Signature**: `pub fn groupBeamsInMeasure(`
+
+## Function Content
+```zig
+    pub fn groupBeamsInMeasure(
+        self: *const BeamGrouper,
+        measure: *const measure_detector.Measure,
+        note_types: []const note_type_converter.NoteTypeResult,
+    ) (BeamGroupingError || std.mem.Allocator.Error)![]BeamGroup {
+        if (measure.notes.items.len != note_types.len) {
+            return BeamGroupingError.InvalidNote;
+        }
+        
+        // Begin beam grouping phase if using educational arena
+        if (self.educational_arena) |arena| {
+            arena.beginPhase(.beam_grouping);
+        }
+        defer {
+            if (self.educational_arena) |arena| {
+                arena.endPhase();
+            }
+        }
+        
+        const time_sig = measure.time_signature;
+        const beat_length = self.getBeatLength(time_sig);
+        _ = time_sig.numerator; // May be used in future
+        _ = measure.getDurationTicks(); // May be used in future for validation
+        
+        // Use educational arena if available for better memory management
+        const alloc = if (self.educational_arena) |arena| 
+            arena.allocator() 
+        else 
+            self.allocator;
+            
+        // Create beam groups without intermediate BeamedNote array
+        var groups = std.ArrayList(BeamGroup).init(alloc);
+        errdefer {
+            for (groups.items) |*group| {
+                group.deinit();
+            }
+            groups.deinit();
+        }
+        
+        // Process notes directly into beam groups
+        var current_group_idx: ?usize = null;
+        
+        for (measure.notes.items, note_types) |timed_note, note_type| {
+            const relative_tick = timed_note.start_tick - measure.start_tick;
+            const beat_position = @as(f64, @floatFromInt(relative_tick)) / @as(f64, @floatFromInt(beat_length));
+            const can_beam = BeamGrouper.canNoteBeBeamed(note_type.note_type);
+            
+            if (!can_beam) {
+                current_group_idx = null;
+                continue;
+            }
+            
+            const beat_number = @as(u32, @intFromFloat(@floor(beat_position)));
+            const note_duration_beats = getBeatDuration(note_type, timed_note.duration);
+            const note_end_beat = beat_position + note_duration_beats;
+            const crosses_beat = @as(u32, @intFromFloat(@floor(note_end_beat))) > beat_number;
+            
+            const should_start_new_group = if (current_group_idx) |idx| blk: {
+                const group = &groups.items[idx];
+                break :blk switch (time_sig.numerator) {
+                    4 => // 4/4 time
+                        (beat_number >= 2 and group.start_beat < 2) or
+                        crosses_beat or
+                        (group.notes.items.len >= 4 and note_type.note_type == .eighth),
+                    3 => // 3/4 time
+                        @floor(group.start_beat) != @as(f64, @floatFromInt(beat_number)) or
+                        (group.notes.items.len >= 3 and note_type.note_type == .eighth),
+                    6, 9, 12 => // Compound meters
+                        @as(u32, @intFromFloat(@floor(beat_position / 3.0))) != 
+                        @as(u32, @intFromFloat(@floor(group.start_beat / 3.0))) or
+                        (group.notes.items.len >= 3 and note_type.note_type == .eighth),
+                    2 => if (time_sig.getDenominator() == 2) // Cut time
+                        @floor(beat_position / 2.0) != @floor(group.start_beat / 2.0) or
+                        group.notes.items.len >= 8
+                    else // 2/4
+                        @floor(group.start_beat) != @as(f64, @floatFromInt(beat_number)) or
+                        group.notes.items.len >= 4,
+                    else => // Generic
+                        @floor(group.start_beat) != @as(f64, @floatFromInt(beat_number)) or
+                        group.notes.items.len >= 4,
+                };
+            } else true;
+            
+            if (should_start_new_group) {
+                // Start a new group
+                var new_group = BeamGroup.init(alloc);
+                try new_group.createAndAddNote(alloc, timed_note, note_type, beat_position);
+                try groups.append(new_group);
+                current_group_idx = groups.items.len - 1;
+            } else {
+                // Add to existing group
+                if (current_group_idx) |idx| {
+                    try groups.items[idx].createAndAddNote(alloc, timed_note, note_type, beat_position);
+                }
+            }
+        }
+        
+        // Assign beam states to notes
+        for (groups.items) |*group| {
+            try self.assignBeamStates(group);
+        }
+        
+        return try groups.toOwnedSlice();
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

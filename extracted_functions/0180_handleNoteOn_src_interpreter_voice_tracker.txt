@@ -1,0 +1,71 @@
+# Function Analysis: handleNoteOn
+
+## Metadata
+- **File**: `src/interpreter/voice_tracker.zig`
+- **Lines**: 81-115 (35 lines)
+- **Type**: function
+- **Visibility**: private
+- **Signature**: `fn handleNoteOn(self: *VoiceTracker, event: midi_events.NoteEvent, tick: u32) !void {`
+
+## Function Content
+```zig
+    fn handleNoteOn(self: *VoiceTracker, event: midi_events.NoteEvent, tick: u32) !void {
+        const channel = event.channel;
+        
+        // Find available voice for this channel
+        var assigned_voice: ?u8 = null;
+        
+        // First, try to find an empty voice slot
+        for (&self.active_notes[channel], 1..) |*voice_slot, voice_num| {
+            if (voice_slot.* == null) {
+                voice_slot.* = ActiveNote{
+                    .note = event.note,
+                    .velocity = event.velocity,
+                    .start_tick = tick,
+                    .channel = channel,
+                    .voice = @intCast(voice_num),
+                };
+                assigned_voice = @intCast(voice_num);
+                break;
+            }
+        }
+        
+        // If no empty slot, we have too many simultaneous notes
+        if (assigned_voice == null) {
+            return voice_allocation.VoiceAllocationError.TooManySimultaneousNotes;
+        }
+        
+        // Record voice event
+        try self.voice_history.append(.{
+            .tick = tick,
+            .channel = channel,
+            .voice = assigned_voice.?,
+            .event_type = .note_on,
+            .note = event.note,
+        });
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

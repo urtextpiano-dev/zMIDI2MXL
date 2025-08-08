@@ -1,0 +1,453 @@
+# Function Analysis: convertMidiToMxl
+
+## Metadata
+- **File**: `src/pipeline.zig`
+- **Lines**: 269-685 (417 lines)
+- **Type**: function
+- **Visibility**: public
+- **Signature**: `pub fn convertMidiToMxl(self: *Pipeline, midi_data: []const u8) !PipelineResult {`
+
+## Function Content
+```zig
+    pub fn convertMidiToMxl(self: *Pipeline, midi_data: []const u8) !PipelineResult {
+        // DEBUG FIX-002: Add debug tracing at pipeline entry
+        std.debug.print("DEBUG FIX-002: [PIPELINE START] - convertMidiToMxl called with {} bytes of MIDI data\n", .{midi_data.len});
+        
+        const vlogger = @import("verbose_logger.zig").getVerboseLogger();
+        
+        // MIDI PARSING PHASE (003.xxx.xxx)
+        vlogger.pipelineStep(.MIDI_PARSE_START, "Beginning MIDI parsing", .{});
+        
+        vlogger.pipelineStep(.MIDI_PARSE_HEADER, "Parsing MIDI header", .{});
+        // Step 1: Parse MIDI header
+        const midi_header = try midi_parser.parseMidiHeader(midi_data);
+        
+        vlogger.pipelineStep(.MIDI_PARSE_TRACKS, "Finding and parsing MIDI tracks", .{});
+        // Step 2: Find and parse tracks
+        var tracks = std.ArrayList(midi_parser.TrackParseResult).init(self.allocator);
+        var tracks_owned = true; // Track ownership state
+        defer {
+            if (tracks_owned) {
+                // Only free tracks if they haven't been transferred to container
+                for (tracks.items) |*track| {
+                    track.deinit(self.allocator);
+                }
+            }
+            tracks.deinit();
+        }
+        
+        vlogger.pipelineStep(.MIDI_PARSE_EVENTS, "Parsing MIDI events from tracks", .{});
+        // Simple track parsing - look for MTrk chunks
+        var offset: usize = 14; // Skip header (14 bytes)
+        var tracks_found: u16 = 0;
+        var parse_iterations: usize = 0;
+        const max_parse_iterations: usize = 10000; // Prevent infinite loops
+        
+        while (offset < midi_data.len and tracks_found < midi_header.track_count) {
+            // CRITICAL SAFETY: Prevent infinite loops in MIDI parsing
+            parse_iterations += 1;
+            if (parse_iterations > max_parse_iterations) {
+                std.debug.print("SAFETY: Too many MIDI parsing iterations, breaking to prevent hang\n", .{});
+                break;
+            }
+            // Look for MTrk magic
+            if (offset + 8 <= midi_data.len and 
+                std.mem.eql(u8, midi_data[offset..offset+4], "MTrk")) {
+                
+                const track_chunk = midi_data[offset..];
+                const track_result = try midi_parser.parseTrack(self.allocator, track_chunk);
+                try tracks.append(track_result);
+                
+                // Skip to next track (8 bytes header + track length)
+                const track_length = std.mem.readInt(u32, midi_data[offset+4..offset+8][0..4], .big);
+                offset += 8 + track_length;
+                tracks_found += 1;
+            } else {
+                offset += 1;
+            }
+        }
+        
+        vlogger.pipelineStep(.MIDI_VALIDATE_STRUCTURE, "Validating MIDI structure", .{});
+        
+        vlogger.pipelineStep(.MIDI_CREATE_CONTAINER, "Creating multi-track container", .{});
+        // Step 3: Create multi-track container
+        const divisions = midi_header.division.getTicksPerQuarter() orelse 480; // Default if SMPTE
+        var container = multi_track.MultiTrackContainer.init(
+            self.allocator, 
+            midi_header.format,
+            divisions
+        );
+        
+        // Add tracks to container (transfer ownership)
+        for (tracks.items) |track| {
+            try container.addTrack(track);
+        }
+        tracks_owned = false; // Ownership transferred to container
+        
+        vlogger.pipelineStep(.MIDI_CREATE_PARTS, "Creating parts from tracks", .{});
+        // Create parts from tracks
+        try container.createParts();
+        
+        // TIMING CONVERSION PHASE (004.xxx.xxx) - CRITICAL FOR IDENTIFYING DURATION MISMATCH
+        vlogger.pipelineStep(.TIMING_START, "Starting timing conversion", .{});
+        
+        vlogger.pipelineStep(.TIMING_DIVISION_SETUP, "Setting up division converter (MIDI PPQ {} -> MXL divisions {})", .{divisions, self.config.divisions});
+        
+        // Step 3: Process notes for each part
+        var all_measures = std.ArrayList(timing.Measure).init(self.allocator);
+        defer all_measures.deinit();
+        
+        // Store enhanced notes for MXL generation with educational metadata
+        var all_enhanced_notes = std.ArrayList(enhanced_note.EnhancedTimedNote).init(self.allocator);
+        defer all_enhanced_notes.deinit();
+        
+        // DEBUG FIX-002: Add debug tracing at main part processing loop entry
+        std.debug.print("DEBUG FIX-002: [PART LOOP START] - About to process {} parts\n", .{container.parts.items.len});
+        
+        for (container.parts.items, 0..) |part, part_idx| {
+            // DEBUG FIX-002: Add debug tracing for each part processing iteration
+            std.debug.print("DEBUG FIX-002: [PART {} START] - Processing part {}/{}\n", .{part_idx, part_idx + 1, container.parts.items.len});
+            
+            // CRITICAL SAFETY: Add logging to identify which part causes hangs
+            // Processing part {d}/{d} - removed debug output for production
+            
+            vlogger.pipelineStep(.TIMING_NOTE_DURATION_TRACKING, "Processing note durations for part {}", .{part_idx + 1});
+            
+            // TASK 1.3: Process each track within the part separately to maintain track indices
+            // Implements TASK 1.3 per CHORD_DETECTION_FIX_TASK_LIST.md lines 41-47
+            var part_timed_notes = std.ArrayList(timing.TimedNote).init(self.allocator);
+            defer part_timed_notes.deinit();
+            
+            // Process each track that belongs to this part
+            for (part.track_indices.items) |track_idx| {
+                // Get notes for this specific track
+                var track_notes = std.ArrayList(midi_parser.NoteEvent).init(self.allocator);
+                defer track_notes.deinit();
+                
+                const track = &container.tracks.items[track_idx];
+                
+                // Filter notes by channel if part has a specific channel
+                if (part.midi_channel) |channel| {
+                    for (track.note_events.items) |note| {
+                        if (note.channel == channel) {
+                            try track_notes.append(note);
+                        }
+                    }
+                } else {
+                    // Include all notes from the track
+                    try track_notes.appendSlice(track.note_events.items);
+                }
+                
+                if (track_notes.items.len > 0) {
+                    vlogger.pipelineStep(.TIMING_CONVERT_TO_TIMED_NOTES, "Converting NoteEvent[] to TimedNote[] for part {} track {} ({} notes)", .{part_idx + 1, track_idx, track_notes.items.len});
+                    // Convert NoteEvent[] to TimedNote[] with correct track index
+                    const track_timed_notes = try self.convertToTimedNotes(track_notes.items, @intCast(track_idx));
+                    defer self.allocator.free(track_timed_notes);
+                    
+                    // Collect all timed notes for this part
+                    try part_timed_notes.appendSlice(track_timed_notes);
+                }
+            }
+            
+            // Sort notes by start_tick for proper ordering
+            std.sort.pdq(timing.TimedNote, part_timed_notes.items, {}, compareTimedNotesByTick);
+            
+            // Transfer ownership to a slice
+            const timed_notes = try part_timed_notes.toOwnedSlice();
+            defer self.allocator.free(timed_notes);
+            
+            vlogger.pipelineStep(.TIMING_VALIDATE_DURATIONS, "Validating note durations for part {} ({} timed notes)", .{part_idx + 1, timed_notes.len});
+            
+            // VOICE ASSIGNMENT PHASE (005.xxx.xxx) - Must happen BEFORE enhanced note creation
+            // This ensures voice data flows through the pipeline
+            if (self.config.enable_voice_assignment and timed_notes.len > 0) {
+                vlogger.pipelineStep(.VOICE_START, "Starting voice assignment for part {}", .{part_idx + 1});
+                
+                vlogger.pipelineStep(.VOICE_ALLOCATOR_INIT, "Initializing voice allocator", .{});
+                var voice_allocator = voice_allocation.VoiceAllocator.init(self.allocator);
+                defer voice_allocator.deinit();
+                
+                vlogger.pipelineStep(.VOICE_ASSIGNMENT, "Assigning voices to {} notes", .{timed_notes.len});
+                const voiced_notes = try voice_allocator.assignVoices(timed_notes);
+                defer self.allocator.free(voiced_notes);
+                
+                // CRITICAL FIX: Update timed_notes with voice assignments
+                // This ensures voice data propagates to enhanced notes
+                for (voiced_notes, 0..) |voiced_note, i| {
+                    timed_notes[i].voice = voiced_note.voice;
+                }
+                
+                vlogger.pipelineStep(.VOICE_VALIDATION, "Voice assignments applied: voices will flow to enhanced notes", .{});
+            }
+            
+            // Apply educational processing or basic conversion AFTER voice assignment
+            // This ensures enhanced notes contain voice data
+            var enhanced_notes: []enhanced_note.EnhancedTimedNote = undefined;
+            var need_to_free_enhanced = false;
+            
+            if (self.config.educational.enabled and self.educational_processor != null) {
+                // EDUCATIONAL PROCESSING PHASE (007.xxx.xxx) - Only if enabled
+                vlogger.pipelineStep(.EDU_START, "Starting educational processing for part {} (with voice data)", .{part_idx + 1});
+                enhanced_notes = try self.educational_processor.?.processNotes(timed_notes);
+                need_to_free_enhanced = false; // Arena owns the memory
+            } else {
+                // Convert TimedNote[] to EnhancedTimedNote[] without educational metadata
+                // Voice data from timed_notes will be preserved in enhanced notes
+                enhanced_notes = try self.convertToEnhancedNotes(timed_notes);
+                need_to_free_enhanced = true;
+            }
+            
+            // Collect enhanced notes from all parts for MXL generation
+            // These now contain voice data from the assignment phase
+            try all_enhanced_notes.appendSlice(enhanced_notes);
+            defer if (need_to_free_enhanced) self.allocator.free(enhanced_notes);
+            
+            // MEASURE DETECTION PHASE (006.xxx.xxx) - Critical for timing validation
+            if (self.config.enable_measure_detection and enhanced_notes.len > 0) {
+                vlogger.pipelineStep(.MEASURE_START, "Starting measure detection for part {}", .{part_idx + 1});
+                
+                const division_converter = try timing.DivisionConverter.init(divisions, self.config.divisions);
+                var boundary_detector = timing.MeasureBoundaryDetector.init(self.allocator, &division_converter);
+                
+                vlogger.pipelineStep(.MEASURE_TIME_SIGNATURE_EXTRACTION, "Extracting time signatures from conductor track", .{});
+                // Extract time signatures from first track (conductor track)
+                const first_track = container.tracks.items[0];
+                const time_signatures = first_track.time_signature_events.items;
+                
+                if (time_signatures.len > 0) {
+                    vlogger.pipelineStep(.MEASURE_BOUNDARY_DETECTION, "Detecting measure boundaries (PPQ: {}, divisions: {}, time sigs: {})", .{divisions, self.config.divisions, time_signatures.len});
+                    
+                    // Enhanced notes now always contain voice data if voice assignment was enabled
+                    const notes_to_process = try self.convertEnhancedToTimedNotes(enhanced_notes);
+                    defer self.allocator.free(notes_to_process);
+                    
+                    vlogger.pipelineStep(.MEASURE_ORGANIZATION, "Organizing {} notes into measures", .{notes_to_process.len});
+                    var part_measures = try boundary_detector.detectMeasureBoundaries(notes_to_process, time_signatures);
+                    try all_measures.appendSlice(part_measures.items);
+                    part_measures.deinit();
+                    
+                    vlogger.pipelineStep(.MEASURE_VALIDATION, "Validating measure structure", .{});
+                } else {
+                    vlogger.pipelineStep(.MEASURE_TIME_SIGNATURE_EXTRACTION, "No time signatures found, skipping measure detection", .{});
+                }
+            }
+            
+            // DEBUG FIX-002: Add debug tracing after each part completes processing
+            std.debug.print("DEBUG FIX-002: [PART {} COMPLETE] - Finished processing part {}/{}\n", .{part_idx, part_idx + 1, container.parts.items.len});
+        }
+        
+        // DEBUG FIX-002: Add comprehensive debug tracing to identify execution path issue
+        std.debug.print("DEBUG FIX-002: [PART PROCESSING COMPLETE] - Parts processed: {}, Enhanced notes collected: {}\n", .{container.parts.items.len, all_enhanced_notes.items.len});
+        std.debug.print("DEBUG FIX-002: [CONTROL FLOW CHECK] - About to enter global collection phase\n", .{});
+        
+        // CRITICAL FIX: Skip global chord detection when voice assignment is enabled
+        // Global chord detection creates new notes without voice data, which breaks multi-voice support
+        // When voice assignment is enabled, we rely on the MXL generator's fallback to detect chords
+        // from the enhanced notes which preserve voice assignments
+        var global_chords: ?[]const chord_detector.ChordGroup = null;
+        
+        if (!self.config.enable_voice_assignment) {
+            // Only do global chord detection when voice assignment is disabled
+            // This preserves the cross-track chord detection feature for non-voice scenarios
+            
+            // GLOBAL NOTE COLLECTION PHASE (007.xxx.xxx) - TASK 2.2: Implement Global Collection Logic
+            // Implements TASK 2.2 per CHORD_DETECTION_FIX_TASK_LIST.md Section 2 lines 65-73
+            std.debug.print("DEBUG FIX-002: [GLOBAL COLLECTION ENTRY] - Starting global note collection for cross-track chord detection\n", .{});
+            vlogger.pipelineStep(.MXL_START, "Starting global note collection for cross-track chord detection", .{});
+            
+            // Create GlobalNoteCollector for cross-track chord detection
+            std.debug.print("DEBUG FIX-002: [COLLECTOR INIT] - Initializing GlobalNoteCollector\n", .{});
+            var global_collector = GlobalNoteCollector.init(self.allocator);
+            defer global_collector.deinit();
+            
+            // Add safety checks for null pointers or empty collections
+            if (container.parts.items.len == 0) {
+                std.debug.print("DEBUG FIX-002: [ERROR CHECK] - No parts found in container, skipping global collection\n", .{});
+            } else {
+                std.debug.print("DEBUG FIX-002: [CONTAINER STATE] - Parts: {}, Tracks: {}\n", .{container.parts.items.len, container.tracks.items.len});
+                
+                // Collect all notes from all parts with track information preserved
+                std.debug.print("DEBUG FIX-002: [COLLECTION START] - Calling collectFromAllParts\n", .{});
+                global_collector.collectFromAllParts(&container) catch |err| {
+                    std.debug.print("DEBUG FIX-002: [COLLECTION ERROR] - Error during global collection: {}\n", .{err});
+                    return err;
+                };
+                std.debug.print("DEBUG FIX-002: [COLLECTION COMPLETE] - Collection completed successfully\n", .{});
+            }
+            
+            // Log collection results for diagnostic purposes
+            std.debug.print("DEBUG FIX-002: [COLLECTION RESULTS] - Collected {} notes from {} parts for chord detection\n", .{global_collector.all_notes.items.len, container.parts.items.len});
+            vlogger.pipelineStep(.MXL_START, "Collected {} notes from {} parts for chord detection", 
+                .{global_collector.all_notes.items.len, container.parts.items.len});
+            
+            // CROSS-TRACK CHORD DETECTION PHASE (TASK 4.1) - TASK 4.1: Update MXL Generator for Global Chords
+            // Implements TASK 4.1 per CHORD_DETECTION_FIX_TASK_LIST.md Section 4 lines 115-121
+            std.debug.print("DEBUG FIX-002: [CHORD DETECTION START] - Entering chord detection phase\n", .{});
+            if (global_collector.all_notes.items.len > 0) {
+                std.debug.print("DEBUG FIX-002: [CHORD DETECTION ACTIVE] - Detecting cross-track chords from {} global notes\n", .{global_collector.all_notes.items.len});
+                vlogger.pipelineStep(.MXL_START, "Detecting cross-track chords from {} global notes", .{global_collector.all_notes.items.len});
+                
+                // CDR-2.2: Use minimal chord detector (fail-safe, EXACT timing only)
+                const minimal_chord_detector = @import("harmony/minimal_chord_detector.zig");
+                var detector = minimal_chord_detector.MinimalChordDetector.init(self.allocator);
+                
+                // Detect chords with EXACT timing match only (no tolerance to prevent sequential grouping)
+                std.debug.print("CDR-2.2: Using minimal chord detector (EXACT timing, no tolerance)\n", .{});
+                const detected_chords = detector.detectChords(global_collector.all_notes.items) catch |err| {
+                    std.debug.print("CDR-2.2: [CHORD DETECTION ERROR] - Error during chord detection: {}\n", .{err});
+                    return err;
+                };
+                global_chords = detected_chords;
+                
+                std.debug.print("DEBUG FIX-002: [CHORD DETECTION COMPLETE] - Detected {} cross-track chords\n", .{detected_chords.len});
+                vlogger.pipelineStep(.MXL_START, "Detected {} cross-track chords", .{detected_chords.len});
+            } else {
+                std.debug.print("DEBUG FIX-002: [CHORD DETECTION SKIP] - No global notes available, skipping chord detection\n", .{});
+            }
+        } else {
+            // When voice assignment is enabled, run chord detection on enhanced notes
+            // This preserves voice assignments while properly detecting chords
+            if (all_enhanced_notes.items.len > 0) {
+                vlogger.pipelineStep(.MXL_START, "Detecting chords from {} enhanced notes with voice assignments", .{all_enhanced_notes.items.len});
+                
+                // Convert enhanced notes to timed notes (preserves voice in base_note)
+                const timed_notes_for_chords = try self.convertEnhancedToTimedNotes(all_enhanced_notes.items);
+                defer self.allocator.free(timed_notes_for_chords);
+                
+                // Use minimal chord detector with EXACT timing match only
+                const minimal_chord_detector = @import("harmony/minimal_chord_detector.zig");
+                var detector = minimal_chord_detector.MinimalChordDetector.init(self.allocator);
+                
+                // Detect chords with EXACT timing match only (no tolerance to prevent sequential grouping)
+                const detected_chords = detector.detectChords(timed_notes_for_chords) catch |err| {
+                    std.debug.print("[CHORD DETECTION ERROR] - Error during chord detection on enhanced notes: {}\n", .{err});
+                    return err;
+                };
+                global_chords = detected_chords;
+                
+                vlogger.pipelineStep(.MXL_START, "Detected {} chords from enhanced notes with voice assignments", .{detected_chords.len});
+            } else {
+                vlogger.pipelineStep(.MXL_START, "No enhanced notes available for chord detection", .{});
+            }
+        }
+        
+        // DEBUG FIX-002: Add debug tracing before MXL generation phase
+        std.debug.print("DEBUG FIX-002: [MXL GENERATION ENTRY] - About to start MusicXML generation\n", .{});
+        std.debug.print("DEBUG FIX-002: [MEMORY STATE] - Allocator state before MXL generation\n", .{});
+        
+        // MUSICXML GENERATION PHASE (008.xxx.xxx)
+        std.debug.print("DEBUG FIX-002: [MXL PHASE START] - Starting MusicXML generation phase\n", .{});
+        vlogger.pipelineStep(.MXL_START, "Starting MusicXML generation", .{});
+        
+        vlogger.pipelineStep(.MXL_GENERATOR_INIT, "Initializing MXL generator (MIDI PPQ: {}, target divisions: {})", .{divisions, self.config.divisions});
+        // Step 4: Generate MusicXML with measure boundaries
+        // Starting MXL generation - removed debug output for production
+        var xml_buffer = std.ArrayList(u8).init(self.allocator);
+        // TIMING-2.3 FIX: Use proper MIDI to MusicXML conversion
+        var generator = try mxl_generator.Generator.initWithConversion(self.allocator, divisions, self.config.divisions);
+        defer generator.deinit();
+        
+        vlogger.pipelineStep(.MXL_HEADER_GENERATION, "Generating MusicXML header", .{});
+        vlogger.pipelineStep(.MXL_PART_LIST_GENERATION, "Generating part list", .{});
+        vlogger.pipelineStep(.MXL_SCORE_PART_GENERATION, "Generating score parts", .{});
+        
+        // TASK-INT-017: Always use enhanced MXL generation for complete pipeline integration
+        if (all_enhanced_notes.items.len > 0) {
+            vlogger.pipelineStep(.MXL_ENHANCED_NOTE_PROCESSING, "Using enhanced MXL generation with {} enhanced notes", .{all_enhanced_notes.items.len});
+            // Use enhanced MXL generation (with or without educational features) - removed debug output for production
+            try self.generateEnhancedMusicXML(&generator, xml_buffer.writer(), all_enhanced_notes.items, &container, global_chords);
+        } else if (container.parts.items.len > 0) {
+            vlogger.pipelineStep(.MXL_NOTE_GENERATION, "Fallback: generating from part notes", .{});
+            // Fallback: no enhanced notes but we have parts
+            var part_notes = try container.getNotesForPart(0);
+            defer part_notes.deinit();
+            
+            // CRITICAL FIX: Convert NoteEvents to TimedNotes to preserve duration
+            const timed_notes = try self.convertToTimedNotes(part_notes.items, 0);
+            defer self.allocator.free(timed_notes);
+            
+            // Extract tempo for fallback generation per TASK 2.2
+            const tempo_f64 = container.getInitialTempo();
+            const tempo_bpm: u32 = @intFromFloat(@round(tempo_f64));
+            
+            try generator.generateMusicXMLWithMeasureBoundaries(xml_buffer.writer(), timed_notes, tempo_bpm);
+        } else {
+            vlogger.pipelineStep(.MXL_NOTE_GENERATION, "Fallback: generating from multi-track container", .{});
+            // Fallback to multi-track function if no parts
+            try generator.generateMultiTrackMusicXML(xml_buffer.writer(), &container);
+        }
+        
+        vlogger.pipelineStep(.MXL_VALIDATION, "Validating generated MusicXML", .{});
+        
+        // Return pipeline result
+        const measures_copy = if (all_measures.items.len > 0) 
+            try self.allocator.dupe(timing.Measure, all_measures.items) else null;
+        
+        // Collect educational metrics if educational processing was enabled
+        // IMPORTANT: Do this BEFORE arena reset to avoid accessing freed memory
+        const educational_metrics = if (self.educational_processor) |*processor| blk: {
+            const proc_metrics = processor.getMetrics();
+            // Convert ProcessingChainMetrics to EducationalPerformanceMetrics
+            break :blk arena_mod.EducationalPerformanceMetrics{
+                .processing_time_per_note_ns = if (proc_metrics.notes_processed > 0) 
+                    proc_metrics.total_processing_time_ns / proc_metrics.notes_processed else 0,
+                .notes_processed = proc_metrics.notes_processed,
+                .phase_allocations = [_]u64{0} ** 5, // ProcessingChainMetrics doesn't track these
+                .peak_educational_memory = 0, // ProcessingChainMetrics doesn't track this
+                .successful_cycles = 1, // We processed one batch successfully
+                .error_count = proc_metrics.error_count,
+            };
+        } else null;
+        
+        // CRITICAL FIX: Reset educational arena memory after metrics collection
+        // This prevents memory leaks by freeing all arena allocations while preserving metrics
+        // Arena reset is safe here because:
+        // 1. MXL generation is complete and educational data has been consumed
+        // 2. Educational metrics have been collected and copied to stack variables
+        // 3. No further access to arena-allocated memory will occur
+        if (self.config.educational.enabled and self.educational_processor != null) {
+            self.educational_processor.?.resetArenaMemoryOnly();
+        }
+        
+        // Clean up global chords (TASK 4.1)
+        if (global_chords) |chords| {
+            // Cast to mutable for cleanup since we own these chords
+            const mutable_chords = @constCast(chords);
+            for (mutable_chords) |*chord| {
+                chord.deinit(self.allocator);
+            }
+            self.allocator.free(mutable_chords);
+        }
+        
+        return PipelineResult{
+            .musicxml_content = try xml_buffer.toOwnedSlice(),
+            .container = container,
+            .measures = measures_copy,
+            .educational_metrics = educational_metrics,
+        };
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

@@ -1,0 +1,103 @@
+# Function Analysis: writeCompleteAttributes
+
+## Metadata
+- **File**: `src/mxl/note_attributes.zig`
+- **Lines**: 220-286 (67 lines)
+- **Type**: function
+- **Visibility**: public
+- **Signature**: `pub fn writeCompleteAttributes(`
+
+## Function Content
+```zig
+    pub fn writeCompleteAttributes(
+        self: *const NoteAttributeGenerator,
+        xml_writer: *XmlWriter,
+        measure_number: u32,
+        is_piano: bool,
+        include_clefs: bool,
+        key_fifths: i8,
+    ) !void {
+        try xml_writer.startElement("attributes", null);
+        
+        // Write divisions (required) using normalized professional divisions
+        // Implements EXECUTIVE MANDATE per critical timing accuracy issue
+        var divisions_buf: [32]u8 = undefined;
+        const divisions_str = try std.fmt.bufPrint(&divisions_buf, "{d}", .{self.quantizer.getNormalizedDivisions()});
+        try xml_writer.writeElement("divisions", divisions_str, null);
+        
+        // Add key signature from MIDI data (FIX-2.1)
+        try xml_writer.startElement("key", null);
+        var fifths_buf: [8]u8 = undefined;
+        const fifths_str = try std.fmt.bufPrint(&fifths_buf, "{d}", .{key_fifths});
+        try xml_writer.writeElement("fifths", fifths_str, null);
+        try xml_writer.endElement(); // key
+        
+        // Only add time signature in first measure
+        if (measure_number == 1) {
+            try xml_writer.startElement("time", null);
+            try xml_writer.writeElement("beats", "4", null);
+            try xml_writer.writeElement("beat-type", "4", null);
+            try xml_writer.endElement(); // time
+        }
+        
+        // Write staves element - 2 for piano, 1 for other instruments
+        if (is_piano) {
+            try xml_writer.writeElement("staves", "2", null);
+        } else {
+            try xml_writer.writeElement("staves", "1", null);
+        }
+        
+        // Write clefs only when requested (typically first measure only)
+        if (include_clefs) {
+            if (is_piano) {
+                // Treble clef for staff 1
+                try xml_writer.startElement("clef", &[_]Attribute{
+                    .{ .name = "number", .value = "1" },
+                });
+                try xml_writer.writeElement("sign", "G", null);
+                try xml_writer.writeElement("line", "2", null);
+                try xml_writer.endElement(); // clef
+                
+                // Bass clef for staff 2
+                try xml_writer.startElement("clef", &[_]Attribute{
+                    .{ .name = "number", .value = "2" },
+                });
+                try xml_writer.writeElement("sign", "F", null);
+                try xml_writer.writeElement("line", "4", null);
+                try xml_writer.endElement(); // clef
+            } else {
+                // Single treble clef for non-piano instruments
+                try xml_writer.startElement("clef", null);
+                try xml_writer.writeElement("sign", "G", null);
+                try xml_writer.writeElement("line", "2", null);
+                try xml_writer.endElement(); // clef
+            }
+        }
+        
+        try xml_writer.endElement(); // attributes
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

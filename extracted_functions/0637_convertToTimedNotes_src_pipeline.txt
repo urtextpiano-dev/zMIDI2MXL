@@ -1,0 +1,67 @@
+# Function Analysis: convertToTimedNotes
+
+## Metadata
+- **File**: `src/pipeline.zig`
+- **Lines**: 690-720 (31 lines)
+- **Type**: function
+- **Visibility**: private
+- **Signature**: `fn convertToTimedNotes(self: *Pipeline, note_events: []const midi_parser.NoteEvent, track_index: u8) ![]timing.TimedNote {`
+
+## Function Content
+```zig
+    fn convertToTimedNotes(self: *Pipeline, note_events: []const midi_parser.NoteEvent, track_index: u8) ![]timing.TimedNote {
+        var duration_tracker = midi_parser.NoteDurationTracker.init(self.allocator);
+        defer duration_tracker.deinit();
+        
+        // Process note events to calculate durations
+        for (note_events) |event| {
+            try duration_tracker.processNoteEvent(event);
+        }
+        
+        try duration_tracker.finalize();
+        
+        // Get completed notes from the tracker
+        const completed_notes = duration_tracker.completed_notes.items;
+        
+        // Convert to TimedNote format
+        var timed_notes = try self.allocator.alloc(timing.TimedNote, completed_notes.len);
+        for (completed_notes, 0..) |note, i| {
+            timed_notes[i] = timing.TimedNote{
+                .note = note.note,
+                .channel = note.channel,
+                .velocity = note.on_velocity,
+                .start_tick = note.on_tick,
+                .duration = note.duration_ticks,
+                .tied_to_next = false,
+                .tied_from_previous = false,
+                .track = track_index,  // Set track field per TASK 1.2
+            };
+        }
+        
+        return timed_notes;
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

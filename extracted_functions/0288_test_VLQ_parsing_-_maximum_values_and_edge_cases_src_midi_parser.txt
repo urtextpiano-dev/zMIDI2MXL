@@ -1,0 +1,56 @@
+# Function Analysis: test_VLQ_parsing_-_maximum_values_and_edge_cases
+
+## Metadata
+- **File**: `src/midi/parser.zig`
+- **Lines**: 176-192 (17 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "VLQ parsing - maximum values and edge cases" {`
+
+## Function Content
+```zig
+test "VLQ parsing - maximum values and edge cases" {
+    // Test maximum 4-byte VLQ value: 0x0FFFFFFF
+    {
+        const data = [_]u8{0xFF, 0xFF, 0xFF, 0x7F};
+        const result = try parseVlq(&data);
+        try std.testing.expectEqual(@as(u32, 0x0FFFFFFF), result.value);
+        try std.testing.expectEqual(@as(u8, 4), result.bytes_read);
+    }
+    
+    // Test value just under maximum
+    {
+        const data = [_]u8{0xFF, 0xFF, 0xFF, 0x7E};
+        const result = try parseVlq(&data);
+        try std.testing.expectEqual(@as(u32, 0x0FFFFFFE), result.value);
+        try std.testing.expectEqual(@as(u8, 4), result.bytes_read);
+    }
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+VLQ parsing - maximum values and edge cases

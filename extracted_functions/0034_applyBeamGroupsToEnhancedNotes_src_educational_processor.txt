@@ -1,0 +1,114 @@
+# Function Analysis: applyBeamGroupsToEnhancedNotes
+
+## Metadata
+- **File**: `src/educational_processor.zig`
+- **Lines**: 1816-1893 (78 lines)
+- **Type**: function
+- **Visibility**: private
+- **Signature**: `fn applyBeamGroupsToEnhancedNotes(`
+
+## Function Content
+```zig
+    fn applyBeamGroupsToEnhancedNotes(
+        self: *EducationalProcessor,
+        enhanced_notes: []enhanced_note.EnhancedTimedNote,
+        beam_groups: []const beam_grouper.BeamGroup,
+        measure_start_tick: u32
+    ) !void {
+        _ = measure_start_tick; // May be used in future for relative positioning
+        
+        // OPTIMIZATION 1: Pre-compute tuplet status flags to avoid repeated checks
+        const coord_enabled = self.config.quality.enable_beam_tuplet_coordination;
+        
+        // OPTIMIZATION 2: Process notes in index order, avoiding O(n²) lookups
+        for (beam_groups, 0..) |group, group_idx| {
+            const base_beam_group_id = @as(u32, @intCast(group_idx));
+            
+            for (group.notes.items) |beamed_note| {
+                // OPTIMIZATION 3: Linear search with early termination
+                var found_match = false;
+                for (enhanced_notes, 0..) |*enhanced, note_idx| {
+                    const base = enhanced.getBaseNote();
+                    
+                    // OPTIMIZATION 4: Fast note matching using multiple criteria
+                    if (base.start_tick == beamed_note.note.start_tick and
+                        base.note == beamed_note.note.note and
+                        base.channel == beamed_note.note.channel) {
+                        
+                        // OPTIMIZATION 5: Fast-path beam group ID calculation
+                        var adjusted_beam_group_id = base_beam_group_id;
+                        if (coord_enabled) {
+                            // Use note index directly instead of separate findNoteIndex call
+                            if (enhanced.tuplet_info) |tuplet_info| {
+                                if (tuplet_info.tuplet != null) {
+                                    // Tuplet notes get high group IDs
+                                    adjusted_beam_group_id = 1000 + base_beam_group_id;
+                                } else {
+                                    // Non-tuplet coordination based on position
+                                    adjusted_beam_group_id = if (note_idx < 3) base_beam_group_id else base_beam_group_id + 100;
+                                }
+                            } else {
+                                // No tuplet info, use position-based coordination
+                                adjusted_beam_group_id = if (note_idx < 3) base_beam_group_id else base_beam_group_id + 100;
+                            }
+                        }
+                        
+                        // OPTIMIZATION 6: Check beam data existence once
+                        if (beamed_note.beams.items.len > 0) {
+                            // Direct access to first beam info without redundant checks
+                            const first_beam = beamed_note.beams.items[0];
+                            const beaming_info = enhanced_note.BeamingInfo{
+                                .beam_state = first_beam.state,
+                                .beam_level = first_beam.level,
+                                .can_beam = beamed_note.can_beam,
+                                .beat_position = beamed_note.beat_position,
+                                .beam_group_id = adjusted_beam_group_id,
+                            };
+                            
+                            // OPTIMIZATION 7: Minimize error handling overhead
+                            enhanced.setBeamingInfo(beaming_info) catch |err| {
+                                if (self.config.performance.enable_performance_fallback) {
+                                    found_match = true;
+                                    break; // Early exit on fallback
+                                }
+                                return err;
+                            };
+                        }
+                        
+                        found_match = true;
+                        break; // Found match, exit inner loop immediately
+                    }
+                }
+                
+                // OPTIMIZATION 8: Track unmatched notes for debugging without performance impact
+                if (!found_match and self.config.performance.enable_performance_monitoring) {
+                    self.metrics.coordination_conflicts_resolved += 1;
+                }
+            }
+        }
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

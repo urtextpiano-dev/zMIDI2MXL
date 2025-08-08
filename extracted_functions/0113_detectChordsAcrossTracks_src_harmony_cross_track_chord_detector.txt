@@ -1,0 +1,105 @@
+# Function Analysis: detectChordsAcrossTracks
+
+## Metadata
+- **File**: `src/harmony/cross_track_chord_detector.zig`
+- **Lines**: 64-132 (69 lines)
+- **Type**: function
+- **Visibility**: public
+- **Signature**: `pub fn detectChordsAcrossTracks(`
+
+## Function Content
+```zig
+    pub fn detectChordsAcrossTracks(
+        self: *CrossTrackChordDetector,
+        notes: []const TimedNote,
+        tolerance_ticks: u32,
+    ) ![]ChordGroup {
+        if (notes.len == 0) {
+            return self.allocator.alloc(ChordGroup, 0);
+        }
+        
+        // Create a working copy and ensure it's sorted by start time
+        const sorted_notes = try self.allocator.alloc(TimedNote, notes.len);
+        defer self.allocator.free(sorted_notes);
+        @memcpy(sorted_notes, notes);
+        
+        // Sort notes by start time for efficient grouping
+        std.sort.pdq(TimedNote, sorted_notes, {}, compareByStartTime);
+        
+        // Temporary storage for cross-track chord groups
+        var cross_track_groups = std.ArrayList(ChordGroup).init(self.allocator);
+        defer cross_track_groups.deinit();
+        
+        // Process notes and identify cross-track chord groups
+        var i: usize = 0;
+        while (i < sorted_notes.len) {
+            var chord_notes = std.ArrayList(TimedNote).init(self.allocator);
+            errdefer chord_notes.deinit();
+            
+            const base_time = sorted_notes[i].start_tick;
+            
+            // Collect all notes within tolerance of base_time
+            while (i < sorted_notes.len) {
+                const note_time = sorted_notes[i].start_tick;
+                // Check if within tolerance (handle both directions)
+                if (note_time >= base_time and note_time <= base_time + tolerance_ticks) {
+                    try chord_notes.append(sorted_notes[i]);
+                    i += 1;
+                } else {
+                    break;
+                }
+            }
+            
+            // Check if this group contains notes from multiple tracks (cross-track chord)
+            if (chord_notes.items.len > 1 and isCrossTrackChord(chord_notes.items)) {
+                // Sort chord notes by pitch for proper notation order
+                const chord_slice = try chord_notes.toOwnedSlice();
+                std.sort.pdq(TimedNote, chord_slice, {}, compareByPitch);
+                
+                // FIX BUG #3: Don't force staff assignment for cross-track chords
+                // Each note will determine its own staff in the generator (generator.zig line 1671-1672)
+                // Setting a default value of 1 for API compatibility, but this field is not used
+                
+                // Collect tracks involved in this cross-track chord (TASK 3.3)
+                const tracks_involved = try self.collectTracksFromNotes(chord_slice);
+                
+                try cross_track_groups.append(ChordGroup{
+                    .start_time = base_time,
+                    .notes = chord_slice,
+                    .staff_assignment = 1, // Default value - not used by generator
+                    .tracks_involved = tracks_involved,
+                    .is_cross_track = true, // This detector creates cross-track chords
+                });
+            } else {
+                // Not a cross-track chord, free the allocated memory
+                chord_notes.deinit();
+            }
+        }
+        
+        return cross_track_groups.toOwnedSlice();
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

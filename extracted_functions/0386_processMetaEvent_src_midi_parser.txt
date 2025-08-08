@@ -1,0 +1,191 @@
+# Function Analysis: processMetaEvent
+
+## Metadata
+- **File**: `src/midi/parser.zig`
+- **Lines**: 2367-2521 (155 lines)
+- **Type**: function
+- **Visibility**: private
+- **Signature**: `fn processMetaEvent(allocator: std.mem.Allocator, state: *TrackParserState, result: *TrackParseResult) (error_mod.MidiError || std.mem.Allocator.Error)!bool {`
+
+## Function Content
+```zig
+fn processMetaEvent(allocator: std.mem.Allocator, state: *TrackParserState, result: *TrackParseResult) (error_mod.MidiError || std.mem.Allocator.Error)!bool {
+    // Meta events: FF type length data...
+    if (state.atEnd()) return error_mod.MidiError.UnexpectedEndOfFile;
+    
+    const meta_type = state.data[state.position];
+    state.position += 1;
+    
+    // Parse length (VLQ) - need at least one byte for the length
+    if (state.atEnd()) return error_mod.MidiError.UnexpectedEndOfFile;
+    
+    const vlq_result = parseVlqFast(state.data[state.position..]) catch {
+        return error_mod.MidiError.InvalidEventData;
+    };
+    state.position += vlq_result.bytes_read;
+    
+    // Check for End of Track before trying to read data
+    if (meta_type == 0x2F and vlq_result.value == 0) {
+        // End of Track - we can stop parsing
+        state.position = state.end_position;
+        return false;
+    }
+    
+    // Handle Set Tempo meta event (FF 51 03)
+    // Implements TASK-011/019 per MIDI_Architecture_Reference.md Section 2.6 lines 248-251
+    if (meta_type == 0x51 and vlq_result.value == 3) {
+        // Tempo event must be exactly 3 bytes
+        if (state.remainingBytes() < 3) {
+            return error_mod.MidiError.UnexpectedEndOfFile;
+        }
+        
+        // Read 3-byte tempo value (microseconds per quarter note)
+        const byte1 = state.data[state.position];
+        const byte2 = state.data[state.position + 1];
+        const byte3 = state.data[state.position + 2];
+        state.position += 3;
+        
+        // Combine bytes into microseconds value (big-endian)
+        const microseconds = (@as(u32, byte1) << 16) | 
+                           (@as(u32, byte2) << 8) | 
+                           @as(u32, byte3);
+        
+        // Create and store tempo event
+        const tempo_event = TempoEvent{
+            .tick = state.current_tick,
+            .microseconds_per_quarter = microseconds,
+        };
+        
+        try result.tempo_events.append(tempo_event);
+        return true; // We parsed a tempo event
+    }
+    
+    // Handle Time Signature meta event (FF 58 04)
+    // Implements TASK-012/019 per MIDI_Architecture_Reference.md Section 2.6 lines 379, 397-406
+    if (meta_type == 0x58 and vlq_result.value == 4) {
+        // Time signature event must be exactly 4 bytes
+        if (state.remainingBytes() < 4) {
+            return error_mod.MidiError.UnexpectedEndOfFile;
+        }
+        
+        // Read 4-byte time signature data
+        const numerator = state.data[state.position];
+        const denominator_power = state.data[state.position + 1];
+        const clocks_per_metronome = state.data[state.position + 2];
+        const thirtysecond_notes = state.data[state.position + 3];
+        state.position += 4;
+        
+        // Create and store time signature event
+        const time_sig_event = TimeSignatureEvent{
+            .tick = state.current_tick,
+            .numerator = numerator,
+            .denominator_power = denominator_power,
+            .clocks_per_metronome = clocks_per_metronome,
+            .thirtysecond_notes_per_quarter = thirtysecond_notes,
+        };
+        
+        try result.time_signature_events.append(time_sig_event);
+        return true; // We parsed a time signature event
+    }
+    
+    // Handle Key Signature meta event (FF 59 02)
+    // Implements TASK-013/019 per MIDI_Architecture_Reference.md Section 2.6 lines 408-417
+    if (meta_type == 0x59 and vlq_result.value == 2) {
+        // Key signature event must be exactly 2 bytes
+        if (state.remainingBytes() < 2) {
+            return error_mod.MidiError.UnexpectedEndOfFile;
+        }
+        
+        // Read 2-byte key signature data
+        const sf = @as(i8, @bitCast(state.data[state.position]));      // Sharps/flats (-7 to +7)
+        const mi = state.data[state.position + 1];                      // Minor (0) or major (1)
+        state.position += 2;
+        
+        // Validate key signature values
+        if (sf < -7 or sf > 7) {
+            return error_mod.MidiError.InvalidEventData;
+        }
+        if (mi > 1) {
+            return error_mod.MidiError.InvalidEventData;
+        }
+        
+        // Create and store key signature event
+        const key_sig_event = KeySignatureEvent{
+            .tick = state.current_tick,
+            .sharps_flats = sf,
+            .is_minor = (mi == 1),  // MIDI: 0 = major, 1 = minor
+        };
+        
+        try result.key_signature_events.append(key_sig_event);
+        return true; // We parsed a key signature event
+    }
+    
+    // Handle Text Events meta events (FF 01-0F length text)
+    // Implements TASK-019 per MIDI_Architecture_Reference.md Section 2.6 lines 367-373
+    if (meta_type >= 0x01 and meta_type <= 0x0F and vlq_result.value > 0) {
+        // Text events must have data
+        if (state.remainingBytes() < vlq_result.value) {
+            return error_mod.MidiError.UnexpectedEndOfFile;
+        }
+        
+        // Extract text data
+        const text_data = state.data[state.position..state.position + vlq_result.value];
+        state.position += vlq_result.value;
+        
+        // Validate UTF-8 encoding - per TASK-019 specification
+        if (!std.unicode.utf8ValidateSlice(text_data)) {
+            // Invalid UTF-8 - we could either error or skip
+            // For robustness, we'll skip but could log a warning
+            return false;
+        }
+        
+        // Allocate memory for text copy (owned by allocator)
+        const text_copy = try allocator.dupe(u8, text_data);
+        errdefer allocator.free(text_copy);
+        
+        // Create and store text event
+        const text_event = TextEvent{
+            .tick = state.current_tick,
+            .event_type = meta_type,
+            .text = text_copy,
+        };
+        
+        try result.text_events.append(text_event);
+        return true; // We parsed a text event
+    }
+    
+    // Skip data bytes for other meta events
+    if (vlq_result.value > 0) {
+        if (state.remainingBytes() < vlq_result.value) {
+            return error_mod.MidiError.UnexpectedEndOfFile;
+        }
+        state.position += vlq_result.value;
+    }
+    
+    return false;
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

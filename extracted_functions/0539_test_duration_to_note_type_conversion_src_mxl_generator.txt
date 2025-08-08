@@ -1,0 +1,84 @@
+# Function Analysis: test_duration_to_note_type_conversion
+
+## Metadata
+- **File**: `src/mxl/generator.zig`
+- **Lines**: 2031-2075 (45 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "duration to note type conversion" {`
+
+## Function Content
+```zig
+test "duration to note type conversion" {
+    const divisions = 480; // Common divisions per quarter note
+
+    // Test whole note (4 quarters)
+    {
+        const note_type = durationToNoteType(divisions * 4, divisions);
+        try std.testing.expectEqual(NoteType.whole, note_type);
+    }
+
+    // Test half note (2 quarters)
+    {
+        const note_type = durationToNoteType(divisions * 2, divisions);
+        try std.testing.expectEqual(NoteType.half, note_type);
+    }
+
+    // Test quarter note
+    {
+        const note_type = durationToNoteType(divisions, divisions);
+        try std.testing.expectEqual(NoteType.quarter, note_type);
+    }
+
+    // Test eighth note
+    {
+        const note_type = durationToNoteType(divisions / 2, divisions);
+        try std.testing.expectEqual(NoteType.eighth, note_type);
+    }
+
+    // Test sixteenth note
+    {
+        const note_type = durationToNoteType(divisions / 4, divisions);
+        try std.testing.expectEqual(NoteType.@"16th", note_type);
+    }
+
+    // Test very short duration (256th note)
+    {
+        const note_type = durationToNoteType(1, divisions);
+        try std.testing.expectEqual(NoteType.@"256th", note_type);
+    }
+
+    // Test breve (double whole note)
+    {
+        const note_type = durationToNoteType(divisions * 8, divisions);
+        try std.testing.expectEqual(NoteType.breve, note_type);
+    }
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+duration to note type conversion

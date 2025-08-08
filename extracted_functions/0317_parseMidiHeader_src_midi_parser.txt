@@ -1,0 +1,92 @@
+# Function Analysis: parseMidiHeader
+
+## Metadata
+- **File**: `src/midi/parser.zig`
+- **Lines**: 720-775 (56 lines)
+- **Type**: function
+- **Visibility**: public
+- **Signature**: `pub fn parseMidiHeader(data: []const u8) error_mod.MidiError!MidiHeader {`
+
+## Function Content
+```zig
+pub fn parseMidiHeader(data: []const u8) error_mod.MidiError!MidiHeader {
+    // Validate minimum header size (14 bytes total)
+    if (data.len < MTHD_TOTAL_SIZE) {
+        return error_mod.MidiError.IncompleteHeader;
+    }
+    
+    // Validate magic number "MThd" (0x4D546864)
+    if (!std.mem.eql(u8, data[0..4], &MTHD_MAGIC)) {
+        return error_mod.MidiError.InvalidMagicNumber;
+    }
+    
+    // Read and validate chunk length (must be 6)
+    const chunk_length = std.mem.readInt(u32, data[4..8], .big);
+    if (chunk_length != MTHD_LENGTH) {
+        return error_mod.MidiError.InvalidHeaderLength;
+    }
+    
+    // Parse format type (bytes 8-9)
+    const format_raw = std.mem.readInt(u16, data[8..10], .big);
+    const format = switch (format_raw) {
+        0 => MidiFormat.single_track,
+        1 => MidiFormat.multi_track_sync,
+        2 => MidiFormat.multi_track_async,
+        else => return error_mod.MidiError.InvalidHeaderLength,
+    };
+    
+    // Parse track count (bytes 10-11)
+    const track_count = std.mem.readInt(u16, data[10..12], .big);
+    
+    // Parse division field (bytes 12-13)
+    const division_raw = std.mem.readInt(u16, data[12..14], .big);
+    const division = if ((division_raw & 0x8000) == 0) blk: {
+        // Bit 15 = 0: Ticks per quarter note (15-bit value)
+        const ticks = @as(u15, @intCast(division_raw & 0x7FFF));
+        break :blk Division{ .ticks_per_quarter = ticks };
+    } else blk: {
+        // Bit 15 = 1: SMPTE timing format
+        // Bits 8-14 contain the negative SMPTE format
+        const smpte_format_bits = @as(u8, @intCast((division_raw >> 8) & 0x7F));
+        // SMPTE format is stored as the negative value
+        const smpte_format = -@as(i8, @intCast(smpte_format_bits));
+        const ticks_per_frame = @as(u8, @intCast(division_raw & 0xFF));
+        break :blk Division{ .smpte = .{ .format = smpte_format, .ticks_per_frame = ticks_per_frame } };
+    };
+    
+    const header = MidiHeader{
+        .format = format,
+        .track_count = track_count,
+        .division = division,
+    };
+    
+    // Validate header consistency
+    try header.validate();
+    
+    return header;
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

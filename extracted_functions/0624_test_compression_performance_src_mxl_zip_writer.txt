@@ -1,0 +1,73 @@
+# Function Analysis: test_compression_performance
+
+## Metadata
+- **File**: `src/mxl/zip_writer.zig`
+- **Lines**: 459-492 (34 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "compression performance" {`
+
+## Function Content
+```zig
+test "compression performance" {
+    // Test that compression meets performance target (20MB/s)
+    var buffer = std.ArrayList(u8).init(std.testing.allocator);
+    defer buffer.deinit();
+
+    var writer = ZipWriter.init(std.testing.allocator, buffer.writer().any());
+    defer writer.deinit();
+
+    // Create 1MB of test data
+    const size = 1024 * 1024;
+    const test_data = try std.testing.allocator.alloc(u8, size);
+    defer std.testing.allocator.free(test_data);
+    
+    // Fill with compressible pattern
+    for (test_data, 0..) |*byte, i| {
+        byte.* = @truncate(i % 256);
+    }
+
+    const start = std.time.nanoTimestamp();
+    try writer.addFile("test.dat", test_data, true);
+    const end = std.time.nanoTimestamp();
+
+    const elapsed_ns = @as(u64, @intCast(end - start));
+    const elapsed_s = @as(f64, @floatFromInt(elapsed_ns)) / 1_000_000_000.0;
+    const mb_per_s = 1.0 / elapsed_s;
+
+    std.debug.print("Compression performance: {d:.2} MB/s\n", .{mb_per_s});
+    
+    // Should meet 20MB/s target
+    try std.testing.expect(mb_per_s >= 20.0);
+    
+    // Clean up the entry to avoid leak
+    try writer.finalize();
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+compression performance

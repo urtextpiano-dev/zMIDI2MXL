@@ -1,0 +1,64 @@
+# Function Analysis: test_TempoMap_-_note_duration_calculation_with_tempo_changes_during_note
+
+## Metadata
+- **File**: `src/midi/parser.zig`
+- **Lines**: 3490-3514 (25 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "TempoMap - note duration calculation with tempo changes during note" {`
+
+## Function Content
+```zig
+test "TempoMap - note duration calculation with tempo changes during note" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    
+    var tempo_map = TempoMap.init(allocator, 96);
+    defer tempo_map.deinit();
+    
+    const events = [_]TempoEvent{
+        .{ .tick = 0, .microseconds_per_quarter = 500_000 },   // 120 BPM
+        .{ .tick = 48, .microseconds_per_quarter = 400_000 },  // 150 BPM at tick 48
+    };
+    try tempo_map.buildFromEvents(&events);
+    
+    // Note spans tempo change: starts at tick 0, ends at tick 96
+    // First half (0-48): 48 ticks at 500,000 μs/quarter = 250,000 μs
+    // Second half (48-96): 48 ticks at 400,000 μs/quarter = 200,000 μs
+    // Total: 450,000 μs
+    const duration = tempo_map.getNoteDurationMicroseconds(0, 96);
+    try std.testing.expectEqual(@as(u64, 450_000), duration);
+    
+    // Test seconds conversion
+    const duration_seconds = tempo_map.getNoteDurationSeconds(0, 96);
+    try std.testing.expectApproxEqAbs(@as(f64, 0.45), duration_seconds, 0.001);
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+TempoMap - note duration calculation with tempo changes during note

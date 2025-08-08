@@ -1,0 +1,69 @@
+# Function Analysis: computeRestScoreWithBeamAwareness
+
+## Metadata
+- **File**: `src/timing/rest_optimizer.zig`
+- **Lines**: 551-583 (33 lines)
+- **Type**: function
+- **Visibility**: private
+- **Signature**: `fn computeRestScoreWithBeamAwareness(self: *RestOptimizer, start_time: u32, duration: u32, rest_type: NoteType, dots: u8, time_sig: TimeSignature, beam_constraints: ?[]const BeamGroupConstraint) f32 {`
+
+## Function Content
+```zig
+    fn computeRestScoreWithBeamAwareness(self: *RestOptimizer, start_time: u32, duration: u32, rest_type: NoteType, dots: u8, time_sig: TimeSignature, beam_constraints: ?[]const BeamGroupConstraint) f32 {
+        var score = self.computeRestScore(start_time, duration, rest_type, dots, time_sig);
+        
+        // Apply beam-aware scoring modifiers
+        if (beam_constraints != null) {
+            // Bonus for not crossing beam group boundaries
+            var crosses_beam_boundary = false;
+            for (beam_constraints.?) |constraint| {
+                // Check if rest spans across beam group boundary
+                if (start_time < constraint.start_time and start_time + duration > constraint.start_time) {
+                    crosses_beam_boundary = true;
+                    break;
+                }
+                if (start_time < constraint.end_time and start_time + duration > constraint.end_time) {
+                    crosses_beam_boundary = true;
+                    break;
+                }
+            }
+            
+            if (!crosses_beam_boundary) {
+                score += self.config.convention_weight * 0.5; // Bonus for respecting beam boundaries
+            } else {
+                score -= self.config.convention_weight * 1.0; // Penalty for crossing boundaries
+            }
+            
+            // Bonus for aligning with beam group subdivisions
+            if (self.alignsWithBeamSubdivisions(start_time, duration, beam_constraints)) {
+                score += self.config.beat_alignment_weight * 0.3;
+            }
+        }
+        
+        return score;
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

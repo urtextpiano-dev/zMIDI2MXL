@@ -1,0 +1,91 @@
+# Function Analysis: test_MeasureBoundaryDetector_-_note_crossing_measure_boundary
+
+## Metadata
+- **File**: `src/timing/measure_detector.zig`
+- **Lines**: 512-563 (52 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "MeasureBoundaryDetector - note crossing measure boundary" {`
+
+## Function Content
+```zig
+test "MeasureBoundaryDetector - note crossing measure boundary" {
+    const allocator = std.testing.allocator;
+    const converter = try timing.DivisionConverter.init(480, 480);
+    const detector = MeasureBoundaryDetector.init(allocator, &converter);
+    
+    // Create test time signature (4/4) 
+    const time_sig = midi_parser.TimeSignatureEvent{
+        .tick = 0,
+        .numerator = 4,
+        .denominator_power = 2,
+        .clocks_per_metronome = 24,
+        .thirtysecond_notes_per_quarter = 8,
+    };
+    
+    const time_signatures = [_]midi_parser.TimeSignatureEvent{time_sig};
+    
+    // Create note that crosses measure boundary
+    const notes = [_]TimedNote{
+        TimedNote{
+            .note = 60, .channel = 0, .velocity = 80,
+            .start_tick = 1800,   // Starts in first measure
+            .duration = 240,      // Extends into second measure (boundary at 1920)
+        },
+    };
+    
+    var measures = try detector.detectMeasureBoundaries(&notes, &time_signatures);
+    defer {
+        for (measures.items) |*measure| {
+            measure.deinit();
+        }
+        measures.deinit();
+    }
+    
+    // Should have 2 measures
+    try std.testing.expectEqual(@as(usize, 2), measures.items.len);
+    
+    // Check first measure - should have first part of split note
+    const first_measure = measures.items[0];
+    try std.testing.expectEqual(@as(usize, 1), first_measure.notes.items.len);
+    const first_note = first_measure.notes.items[0];
+    try std.testing.expectEqual(@as(u32, 1800), first_note.start_tick);
+    try std.testing.expectEqual(@as(u32, 120), first_note.duration);
+    try std.testing.expect(first_note.tied_to_next);
+    
+    // Check second measure - should have second part of split note
+    const second_measure = measures.items[1];
+    try std.testing.expectEqual(@as(usize, 1), second_measure.notes.items.len);
+    const second_note = second_measure.notes.items[0];
+    try std.testing.expectEqual(@as(u32, 1920), second_note.start_tick);
+    try std.testing.expectEqual(@as(u32, 120), second_note.duration);
+    try std.testing.expect(second_note.tied_from_previous);
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+MeasureBoundaryDetector - note crossing measure boundary

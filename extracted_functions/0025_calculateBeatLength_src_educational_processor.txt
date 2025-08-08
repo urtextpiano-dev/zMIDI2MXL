@@ -1,0 +1,63 @@
+# Function Analysis: calculateBeatLength
+
+## Metadata
+- **File**: `src/educational_processor.zig`
+- **Lines**: 1396-1422 (27 lines)
+- **Type**: function
+- **Visibility**: private
+- **Signature**: `fn calculateBeatLength(self: *EducationalProcessor, notes: []const measure_detector.TimedNote) u32 {`
+
+## Function Content
+```zig
+    fn calculateBeatLength(self: *EducationalProcessor, notes: []const measure_detector.TimedNote) u32 {
+        
+        if (notes.len < 2) return 480; // Default quarter note length
+        
+        // Find the most common interval between consecutive note starts
+        // This is a simple heuristic - could be improved with more sophisticated analysis
+        var intervals = std.ArrayList(u32).init(self.arena.allocator());
+        defer intervals.deinit();
+        
+        for (0..notes.len - 1) |i| {
+            const interval = notes[i + 1].start_tick - notes[i].start_tick;
+            if (interval > 0 and interval <= 960) { // Reasonable range for beat subdivisions
+                intervals.append(interval) catch continue;
+            }
+        }
+        
+        if (intervals.items.len == 0) return 480;
+        
+        // For simplicity, use the first interval multiplied by a reasonable factor
+        // This could be enhanced with statistical analysis
+        const base_interval = intervals.items[0];
+        
+        // If the interval looks like a subdivision, multiply to get beat length
+        if (base_interval <= 120) return base_interval * 4; // Sixteenth notes -> quarter note
+        if (base_interval <= 240) return base_interval * 2; // Eighth notes -> quarter note
+        return base_interval; // Assume it's already a beat length
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

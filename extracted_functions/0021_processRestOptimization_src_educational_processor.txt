@@ -1,0 +1,220 @@
+# Function Analysis: processRestOptimization
+
+## Metadata
+- **File**: `src/educational_processor.zig`
+- **Lines**: 932-1115 (184 lines)
+- **Type**: function
+- **Visibility**: private
+- **Signature**: `fn processRestOptimization(self: *EducationalProcessor, enhanced_notes: []enhanced_note.EnhancedTimedNote) EducationalProcessingError!void {`
+
+## Function Content
+```zig
+    fn processRestOptimization(self: *EducationalProcessor, enhanced_notes: []enhanced_note.EnhancedTimedNote) EducationalProcessingError!void {
+        const phase_start = std.time.nanoTimestamp();
+        const vlogger = verbose_logger.getVerboseLogger().scoped("Educational");
+        
+        // Phase 007.030.xxx: Rest Optimization (5 steps)
+        vlogger.parent.pipelineStep(.EDU_REST_OPTIMIZATION_START, "Starting rest optimization phase", .{});
+        vlogger.data("Input notes: {}, Memory before: {}B", .{enhanced_notes.len, self.arena.getMetrics().peak_educational_memory});
+        
+        self.current_phase = .rest_optimization;
+        self.arena.beginPhase(.rest_optimization);
+        defer {
+            self.arena.endPhase();
+            const phase_end = std.time.nanoTimestamp();
+            self.metrics.phase_processing_times[@intFromEnum(ProcessingPhase.rest_optimization)] = @as(u64, @intCast(phase_end - phase_start));
+            self.current_phase = null;
+            
+            // Memory cleanup tracking
+            const cleanup_start = std.time.nanoTimestamp();
+            vlogger.parent.pipelineStep(.EDU_MEMORY_CLEANUP, "Cleaning up rest optimization phase memory", .{});
+            const cleanup_duration = std.time.nanoTimestamp() - cleanup_start;
+            vlogger.timing("rest_cleanup", @as(u64, @intCast(cleanup_duration)));
+            vlogger.data("Memory after cleanup: {}B", .{self.arena.getMetrics().peak_educational_memory});
+        }
+        
+        if (enhanced_notes.len == 0) {
+            vlogger.data("No notes to process, skipping rest optimization", .{});
+            return;
+        }
+        
+        // Step 1: Analysis - Analyze rest patterns for consolidation opportunities
+        const analysis_start = std.time.nanoTimestamp();
+        vlogger.parent.pipelineStep(.EDU_REST_ANALYSIS, "Analyzing rest patterns for consolidation", .{});
+        
+        var rest_count: usize = 0;
+        for (enhanced_notes) |note| {
+            if (note.getBaseNote().note == 0) {
+                rest_count += 1;
+            }
+        }
+        
+        const analysis_duration = std.time.nanoTimestamp() - analysis_start;
+        vlogger.timing("rest_analysis", @as(u64, @intCast(analysis_duration)));
+        vlogger.data("Analysis found {} rest notes to process", .{rest_count});
+        
+        // Step 2: Consolidation - Single-pass rest consolidation
+        const consolidation_start = std.time.nanoTimestamp();
+        vlogger.parent.pipelineStep(.EDU_REST_CONSOLIDATION, "Consolidating consecutive rest sequences", .{});
+        
+        var i: usize = 0;
+        var rest_loop_iterations: usize = 0;
+        var consolidations_made: usize = 0;
+        
+        while (i < enhanced_notes.len) {
+            // CRITICAL SAFETY: Prevent infinite loops
+            rest_loop_iterations += 1;
+            if (rest_loop_iterations > self.config.performance.max_iterations_per_loop) {
+                std.debug.print("SAFETY: Too many iterations in rest optimization loop, breaking to prevent hang\n", .{});
+                break;
+            }
+            
+            const note = &enhanced_notes[i];
+            const base = note.getBaseNote();
+            
+            // Skip non-rests
+            if (base.note != 0) {
+                note.processing_flags.rest_processed = true;
+                i += 1;
+                continue;
+            }
+            
+            // Found a rest - look for consecutive rests to consolidate
+            var j = i + 1;
+            var total_duration = base.duration;
+            var last_end_tick = base.start_tick + base.duration;
+            var rest_inner_iterations: usize = 0;
+            
+            while (j < enhanced_notes.len) {
+                // CRITICAL SAFETY: Prevent infinite inner loops
+                rest_inner_iterations += 1;
+                if (rest_inner_iterations > 1000) {
+                    std.debug.print("SAFETY: Too many inner iterations in rest optimization, breaking\n", .{});
+                    break;
+                }
+                const next_note = enhanced_notes[j].getBaseNote();
+                
+                // Stop if not a rest
+                if (next_note.note != 0) break;
+                
+                // Stop if there's a gap
+                if (next_note.start_tick > last_end_tick + 10) break;
+                
+                // Stop if crossing obvious beat boundary (simplified check)
+                const beat_boundary = ((next_note.start_tick / 480) * 480);
+                if (beat_boundary > base.start_tick and beat_boundary < next_note.start_tick) {
+                    // Only stop if the rest would cross the beat unnaturally
+                    if (total_duration < 480 and total_duration + next_note.duration > 480) {
+                        break;
+                    }
+                }
+                
+                total_duration += next_note.duration;
+                last_end_tick = next_note.start_tick + next_note.duration;
+                j += 1;
+            }
+            
+            // Apply consolidation if we found multiple consecutive rests
+            if (j > i + 1) {
+                consolidations_made += 1;
+                const rest_info = self.arena.allocForEducational(enhanced_note.RestInfo, 1) catch continue;
+                rest_info[0] = .{
+                    .rest_data = .{
+                        .start_time = base.start_tick,
+                        .duration = total_duration,
+                        .note_type = .whole, // Will be calculated properly in MXL generation
+                        .dots = 0,
+                        .alignment_score = 1.0,
+                        .measure_number = 0,
+                    },
+                    .is_optimized_rest = true,
+                    .original_duration = base.duration,
+                };
+                note.rest_info = &rest_info[0];
+                
+                // Mark other rests for removal (add this field to ProcessingFlags if needed)
+                for (i + 1..j) |k| {
+                    // Just mark as processed, MXL generator will handle consolidation
+                    enhanced_notes[k].processing_flags.rest_processed = true;
+                }
+            }
+            
+            // Mark all as processed
+            for (i..j) |k| {
+                enhanced_notes[k].processing_flags.rest_processed = true;
+            }
+            
+            i = j;
+        }
+        
+        const consolidation_duration = std.time.nanoTimestamp() - consolidation_start;
+        vlogger.timing("rest_consolidation", @as(u64, @intCast(consolidation_duration)));
+        vlogger.data("Rest consolidation completed: {} consolidations made, {} iterations", .{consolidations_made, rest_loop_iterations});
+        
+        // Step 3: Beam Coordination - Check for rest-beam coordination issues
+        const beam_coord_start = std.time.nanoTimestamp();
+        vlogger.parent.pipelineStep(.EDU_REST_BEAM_COORDINATION, "Coordinating rest optimization with beam groups", .{});
+        
+        var coordination_issues: usize = 0;
+        if (self.config.quality.enable_beam_tuplet_coordination) {
+            // Simple check for rests that might interfere with beam groups
+            for (enhanced_notes) |note| {
+                const base = note.getBaseNote();
+                if (base.note == 0 and note.rest_info != null and note.beaming_info != null) {
+                    coordination_issues += 1;
+                }
+            }
+        }
+        
+        const beam_coord_duration = std.time.nanoTimestamp() - beam_coord_start;
+        vlogger.timing("rest_beam_coordination", @as(u64, @intCast(beam_coord_duration)));
+        vlogger.data("Beam coordination check: {} potential issues detected", .{coordination_issues});
+        
+        // Step 4: Metadata Assignment - Final metadata assignment
+        const metadata_start = std.time.nanoTimestamp();
+        vlogger.parent.pipelineStep(.EDU_REST_METADATA_ASSIGNMENT, "Finalizing rest optimization metadata", .{});
+        
+        var optimized_rests: usize = 0;
+        for (enhanced_notes) |note| {
+            if (note.rest_info != null and note.rest_info.?.is_optimized_rest) {
+                optimized_rests += 1;
+            }
+        }
+        
+        const metadata_duration = std.time.nanoTimestamp() - metadata_start;
+        vlogger.timing("rest_metadata", @as(u64, @intCast(metadata_duration)));
+        
+        // Phase completion summary
+        const total_phase_duration = std.time.nanoTimestamp() - phase_start;
+        vlogger.data("Rest optimization phase completed: {}ns total, {} optimized rests", .{total_phase_duration, optimized_rests});
+        
+        if (rest_count > 0) {
+            const ns_per_rest = @divTrunc(@as(u64, @intCast(total_phase_duration)), rest_count);
+            vlogger.data("Performance: {}ns per rest note processed", .{ns_per_rest});
+        }
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

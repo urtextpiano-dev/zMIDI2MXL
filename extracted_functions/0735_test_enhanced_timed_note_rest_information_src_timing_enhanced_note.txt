@@ -1,0 +1,65 @@
+# Function Analysis: test_enhanced_timed_note_rest_information
+
+## Metadata
+- **File**: `src/timing/enhanced_note.zig`
+- **Lines**: 537-562 (26 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "enhanced timed note rest information" {`
+
+## Function Content
+```zig
+test "enhanced timed note rest information" {
+    var educational_arena = arena.EducationalArena.init(std.testing.allocator, false, false);
+    defer educational_arena.deinit();
+    
+    const rest_note = measure_detector.TimedNote{
+        .note = 0,   // Rest represented with note 0
+        .channel = 0,
+        .velocity = 0, // Rest has velocity 0
+        .start_tick = 480,
+        .duration = 480, // Quarter rest
+    };
+    
+    var enhanced_note = EnhancedTimedNote.init(rest_note, &educational_arena);
+    
+    const rest_info = RestInfo{
+        .is_optimized_rest = true,
+        .original_duration = 360,
+        .alignment_score = 0.8,
+    };
+    
+    try enhanced_note.setRestInfo(rest_info);
+    try std.testing.expect(enhanced_note.rest_info.?.is_optimized_rest);
+    try std.testing.expect(enhanced_note.rest_info.?.original_duration == 360);
+    try std.testing.expect(enhanced_note.rest_info.?.alignment_score == 0.8);
+    try std.testing.expect(enhanced_note.processing_flags.rest_processed);
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+enhanced timed note rest information

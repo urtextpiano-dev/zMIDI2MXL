@@ -1,0 +1,118 @@
+# Function Analysis: decomposeIntoTiedNotes
+
+## Metadata
+- **File**: `src/timing/note_type_converter.zig`
+- **Lines**: 160-241 (82 lines)
+- **Type**: function
+- **Visibility**: public
+- **Signature**: `pub fn decomposeIntoTiedNotes(`
+
+## Function Content
+```zig
+    pub fn decomposeIntoTiedNotes(
+        self: *const NoteTypeConverter,
+        duration: u32,
+        allocator: std.mem.Allocator,
+    ) ![]TiedNote {
+        var tied_notes = std.ArrayList(TiedNote).init(allocator);
+        errdefer tied_notes.deinit();
+        
+        var remaining_duration = duration;
+        var is_first = true;
+        
+        while (remaining_duration > 0) {
+            // Find largest note that fits
+            if (self.convertDurationToNoteType(remaining_duration)) |result| {
+                const tie_type: TiedNote.TieType = if (is_first)
+                    .start
+                else if (result.getTotalDuration(self.divisions_per_quarter) == remaining_duration)
+                    .stop
+                else
+                    .middle;
+                
+                try tied_notes.append(.{
+                    .note_type = result.note_type,
+                    .dots = result.dots,
+                    .tie_type = tie_type,
+                });
+                
+                remaining_duration -= result.getTotalDuration(self.divisions_per_quarter);
+                is_first = false;
+            } else {
+                // Find largest note type that's smaller than remaining duration
+                const note_types = [_]NoteType{
+                    .breve, .whole, .half, .quarter, .eighth,
+                    .@"16th", .@"32nd", .@"64th", .@"128th", .@"256th",
+                };
+                
+                var found = false;
+                for (note_types) |note_type| {
+                    const note_duration = note_type.getDurationInDivisions(self.divisions_per_quarter);
+                    if (note_duration <= remaining_duration) {
+                        const tie_type: TiedNote.TieType = if (is_first) .start else .middle;
+                        
+                        try tied_notes.append(.{
+                            .note_type = note_type,
+                            .dots = 0,
+                            .tie_type = tie_type,
+                        });
+                        
+                        remaining_duration -= note_duration;
+                        is_first = false;
+                        found = true;
+                        break;
+                    }
+                }
+                
+                if (!found) {
+                    // Use smallest available note type
+                    const tie_type: TiedNote.TieType = if (is_first) .start else .middle;
+                    
+                    try tied_notes.append(.{
+                        .note_type = .@"256th",
+                        .dots = 0,
+                        .tie_type = tie_type,
+                    });
+                    
+                    const min_duration = NoteType.@"256th".getDurationInDivisions(self.divisions_per_quarter);
+                    remaining_duration = if (remaining_duration > min_duration)
+                        remaining_duration - min_duration
+                    else
+                        0;
+                    is_first = false;
+                }
+            }
+        }
+        
+        // Fix the last note's tie type
+        if (tied_notes.items.len > 0) {
+            tied_notes.items[tied_notes.items.len - 1].tie_type = .stop;
+        }
+        
+        return tied_notes.toOwnedSlice();
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

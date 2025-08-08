@@ -1,0 +1,250 @@
+# Function Analysis: processBeamGrouping
+
+## Metadata
+- **File**: `src/educational_processor.zig`
+- **Lines**: 714-927 (214 lines)
+- **Type**: function
+- **Visibility**: private
+- **Signature**: `fn processBeamGrouping(self: *EducationalProcessor, enhanced_notes: []enhanced_note.EnhancedTimedNote) EducationalProcessingError!void {`
+
+## Function Content
+```zig
+    fn processBeamGrouping(self: *EducationalProcessor, enhanced_notes: []enhanced_note.EnhancedTimedNote) EducationalProcessingError!void {
+        const phase_start = std.time.nanoTimestamp();
+        const vlogger = verbose_logger.getVerboseLogger().scoped("Educational");
+        
+        // Phase 007.020.xxx: Beam Grouping (5 steps)
+        vlogger.parent.pipelineStep(.EDU_BEAM_GROUPING_START, "Starting beam grouping phase", .{});
+        vlogger.data("Input notes: {}, Memory before: {}B", .{enhanced_notes.len, self.arena.getMetrics().peak_educational_memory});
+        
+        self.current_phase = .beam_grouping;
+        self.arena.beginPhase(.beam_grouping);
+        defer {
+            self.arena.endPhase();
+            const phase_end = std.time.nanoTimestamp();
+            self.metrics.phase_processing_times[@intFromEnum(ProcessingPhase.beam_grouping)] = @as(u64, @intCast(phase_end - phase_start));
+            self.current_phase = null;
+            
+            // Memory cleanup tracking
+            const cleanup_start = std.time.nanoTimestamp();
+            vlogger.parent.pipelineStep(.EDU_MEMORY_CLEANUP, "Cleaning up beam grouping phase memory", .{});
+            const cleanup_duration = std.time.nanoTimestamp() - cleanup_start;
+            vlogger.timing("beam_cleanup", @as(u64, @intCast(cleanup_duration)));
+            vlogger.data("Memory after cleanup: {}B", .{self.arena.getMetrics().peak_educational_memory});
+        }
+        
+        if (enhanced_notes.len == 0) {
+            vlogger.data("No notes to process, skipping beam grouping", .{});
+            return;
+        }
+        
+        // Step 1: Analysis - Analyze beam patterns
+        const analysis_start = std.time.nanoTimestamp();
+        vlogger.parent.pipelineStep(.EDU_BEAM_ANALYSIS, "Analyzing note patterns for beam grouping", .{});
+        
+        // Count beamable notes upfront for metrics
+        var beamable_count: usize = 0;
+        for (enhanced_notes) |note| {
+            const base = note.getBaseNote();
+            if (base.note != 0 and base.duration < 480) {
+                beamable_count += 1;
+            }
+        }
+        
+        const analysis_duration = std.time.nanoTimestamp() - analysis_start;
+        vlogger.timing("beam_analysis", @as(u64, @intCast(analysis_duration)));
+        vlogger.data("Analysis found {} beamable notes (duration < quarter note)", .{beamable_count});
+        
+        // Step 2: Group Formation - Single pass to identify and mark beamable note sequences
+        const grouping_start = std.time.nanoTimestamp();
+        vlogger.parent.pipelineStep(.EDU_BEAM_GROUP_FORMATION, "Forming beam groups from beamable notes", .{});
+        
+        var i: usize = 0;
+        var beam_loop_iterations: usize = 0;
+        var beam_groups_created: usize = 0;
+        
+        while (i < enhanced_notes.len) {
+            // CRITICAL SAFETY: Prevent infinite loops
+            beam_loop_iterations += 1;
+            if (beam_loop_iterations > self.config.performance.max_iterations_per_loop) {
+                std.debug.print("SAFETY: Too many iterations in beam grouping loop, breaking to prevent hang\n", .{});
+                break;
+            }
+            
+            const note = &enhanced_notes[i];
+            const base = note.getBaseNote();
+            
+            // Skip rests and long notes (quarter notes or longer)
+            if (base.note == 0 or base.duration >= 480) {
+                note.processing_flags.beaming_processed = true;
+                i += 1;
+                continue;
+            }
+            
+            // Find consecutive beamable notes
+            var j = i + 1;
+            const beat_start = (base.start_tick / 480) * 480; // Beat boundary
+            const beat_end = beat_start + 480;
+            var beam_inner_iterations: usize = 0;
+            
+            while (j < enhanced_notes.len) {
+                // CRITICAL SAFETY: Prevent infinite inner loops
+                beam_inner_iterations += 1;
+                if (beam_inner_iterations > 1000) {
+                    std.debug.print("SAFETY: Too many inner iterations in beam grouping, breaking\n", .{});
+                    break;
+                }
+                const next = enhanced_notes[j].getBaseNote();
+                
+                // Stop at rest or long note
+                if (next.note == 0 or next.duration >= 480) break;
+                
+                // Stop if crossing beat boundary (simplified rule)
+                if (next.start_tick >= beat_end) break;
+                
+                // Stop if too far apart - handle overlapping notes safely
+                // CRITICAL FIX: Prevent integer underflow when notes overlap or have timing edge cases
+                const prev_note = enhanced_notes[j-1].getBaseNote();
+                const prev_end_tick = prev_note.start_tick + prev_note.duration;
+                
+                // Calculate gap with overflow protection - handles overlapping MIDI notes
+                const gap = if (next.start_tick >= prev_end_tick) 
+                    next.start_tick - prev_end_tick 
+                else 
+                    0; // Overlapping notes have zero gap - treat as immediately consecutive
+                    
+                if (gap > 60) break;
+                
+                // Check for tuplet conflict (beams shouldn't cross tuplet boundaries)
+                if (self.config.quality.enable_beam_tuplet_coordination) {
+                    if (enhanced_notes[j-1].tuplet_info != null and enhanced_notes[j].tuplet_info == null) break;
+                    if (enhanced_notes[j-1].tuplet_info == null and enhanced_notes[j].tuplet_info != null) break;
+                }
+                
+                j += 1;
+            }
+            
+            // Apply beaming if we have 2+ consecutive notes
+            if (j > i + 1) {
+                beam_groups_created += 1;
+                // Allocate beam info for first note
+                const beam_info = self.arena.allocForEducational(enhanced_note.BeamingInfo, 1) catch continue;
+                beam_info[0] = .{
+                    .beam_state = .begin,
+                    .beam_level = if (base.duration <= 120) @as(u8, 2) else @as(u8, 1),
+                    .can_beam = true,
+                    .beat_position = @as(f64, @floatFromInt(base.start_tick % 480)) / 480.0,
+                    .beam_group_id = @intCast(i),
+                };
+                enhanced_notes[i].beaming_info = &beam_info[0];
+                
+                // Middle notes
+                for (i + 1..j - 1) |k| {
+                    const mid_info = self.arena.allocForEducational(enhanced_note.BeamingInfo, 1) catch continue;
+                    const mid_base = enhanced_notes[k].getBaseNote();
+                    mid_info[0] = .{
+                        .beam_state = .@"continue",
+                        .beam_level = if (mid_base.duration <= 120) @as(u8, 2) else @as(u8, 1),
+                        .can_beam = true,
+                        .beat_position = @as(f64, @floatFromInt(mid_base.start_tick % 480)) / 480.0,
+                        .beam_group_id = @intCast(i),
+                    };
+                    enhanced_notes[k].beaming_info = &mid_info[0];
+                }
+                
+                // Last note
+                if (j > i + 1) {
+                    const end_info = self.arena.allocForEducational(enhanced_note.BeamingInfo, 1) catch continue;
+                    const end_base = enhanced_notes[j - 1].getBaseNote();
+                    end_info[0] = .{
+                        .beam_state = .end,
+                        .beam_level = if (end_base.duration <= 120) @as(u8, 2) else @as(u8, 1),
+                        .can_beam = true,
+                        .beat_position = @as(f64, @floatFromInt(end_base.start_tick % 480)) / 480.0,
+                        .beam_group_id = @intCast(i),
+                    };
+                    enhanced_notes[j - 1].beaming_info = &end_info[0];
+                }
+            }
+            
+            // Mark all as processed
+            for (i..j) |k| {
+                enhanced_notes[k].processing_flags.beaming_processed = true;
+            }
+            
+            i = j;
+        }
+        
+        const grouping_duration = std.time.nanoTimestamp() - grouping_start;
+        vlogger.timing("beam_grouping", @as(u64, @intCast(grouping_duration)));
+        vlogger.data("Beam group formation completed: {} groups created, {} iterations", .{beam_groups_created, beam_loop_iterations});
+        
+        // Step 3: Tuplet Coordination - Check beam-tuplet coordination
+        const coordination_start = std.time.nanoTimestamp();
+        vlogger.parent.pipelineStep(.EDU_BEAM_TUPLET_COORDINATION, "Coordinating beam groups with tuplet boundaries", .{});
+        
+        var coordination_conflicts: usize = 0;
+        if (self.config.quality.enable_beam_tuplet_coordination) {
+            // Count notes where beam groups cross tuplet boundaries
+            for (enhanced_notes[0..enhanced_notes.len-1], 1..) |note1, idx| {
+                const note2 = enhanced_notes[idx];
+                if (note1.beaming_info != null and note2.beaming_info != null) {
+                    if ((note1.tuplet_info != null) != (note2.tuplet_info != null)) {
+                        coordination_conflicts += 1;
+                    }
+                }
+            }
+        }
+        
+        const coordination_duration = std.time.nanoTimestamp() - coordination_start;
+        vlogger.timing("beam_tuplet_coordination", @as(u64, @intCast(coordination_duration)));
+        vlogger.data("Tuplet coordination check: {} conflicts detected", .{coordination_conflicts});
+        
+        // Step 4: Metadata Assignment - Final metadata assignment
+        const metadata_start = std.time.nanoTimestamp();
+        vlogger.parent.pipelineStep(.EDU_BEAM_METADATA_ASSIGNMENT, "Finalizing beam metadata assignments", .{});
+        
+        var beamed_notes_count: usize = 0;
+        for (enhanced_notes) |note| {
+            if (note.beaming_info != null) {
+                beamed_notes_count += 1;
+            }
+        }
+        
+        const metadata_duration = std.time.nanoTimestamp() - metadata_start;
+        vlogger.timing("beam_metadata", @as(u64, @intCast(metadata_duration)));
+        
+        // Phase completion summary
+        const total_phase_duration = std.time.nanoTimestamp() - phase_start;
+        vlogger.data("Beam grouping phase completed: {}ns total, {} groups, {} beamed notes", .{total_phase_duration, beam_groups_created, beamed_notes_count});
+        
+        if (beamed_notes_count > 0) {
+            const ns_per_beamable = @divTrunc(@as(u64, @intCast(total_phase_duration)), beamable_count);
+            vlogger.data("Performance: {}ns per beamable note processed", .{ns_per_beamable});
+        }
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

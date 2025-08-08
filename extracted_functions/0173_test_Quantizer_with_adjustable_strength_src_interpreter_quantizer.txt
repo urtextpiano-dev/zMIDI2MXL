@@ -1,0 +1,62 @@
+# Function Analysis: test_Quantizer_with_adjustable_strength
+
+## Metadata
+- **File**: `src/interpreter/quantizer.zig`
+- **Lines**: 227-249 (23 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "Quantizer with adjustable strength" {`
+
+## Function Content
+```zig
+test "Quantizer with adjustable strength" {
+    var quantizer = Quantizer.init(std.testing.allocator, 480);
+    const grid = quantizer.grids[2]; // 16th note grid
+    
+    // Test 100% strength (default)
+    try std.testing.expectEqual(@as(u32, 120), quantizer.quantizeTick(100, grid));
+    
+    // Test 0% strength (no quantization)
+    quantizer.setStrength(0);
+    try std.testing.expectEqual(@as(u32, 100), quantizer.quantizeTick(100, grid));
+    
+    // Test 50% strength (halfway between original and quantized)
+    quantizer.setStrength(50);
+    const result = quantizer.quantizeTick(100, grid);
+    // Original: 100, Quantized: 120, Expected: 110
+    try std.testing.expectEqual(@as(u32, 110), result);
+    
+    // Test 75% strength
+    quantizer.setStrength(75);
+    const result75 = quantizer.quantizeTick(100, grid);
+    // Original: 100, Quantized: 120, 75% of 20 = 15, Expected: 115
+    try std.testing.expectEqual(@as(u32, 115), result75);
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+Quantizer with adjustable strength

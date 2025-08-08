@@ -1,0 +1,112 @@
+# Function Analysis: test_MIDI_header_parsing_-_error_conditions
+
+## Metadata
+- **File**: `src/midi/parser.zig`
+- **Lines**: 893-965 (73 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "MIDI header parsing - error conditions" {`
+
+## Function Content
+```zig
+test "MIDI header parsing - error conditions" {
+    // Test incomplete header (too short)
+    {
+        const data = [_]u8{ 0x4D, 0x54, 0x68, 0x64, 0x00, 0x00 }; // Only 6 bytes
+        const result = parseMidiHeader(&data);
+        try std.testing.expectError(error_mod.MidiError.IncompleteHeader, result);
+    }
+    
+    // Test invalid magic number
+    {
+        const data = [_]u8{ 
+            0x4D, 0x54, 0x68, 0x65,  // "MThe" instead of "MThd"
+            0x00, 0x00, 0x00, 0x06,  // Length = 6
+            0x00, 0x01,              // Format 1
+            0x00, 0x01,              // 1 track
+            0x00, 0x60               // 96 ticks per quarter note
+        };
+        const result = parseMidiHeader(&data);
+        try std.testing.expectError(error_mod.MidiError.InvalidMagicNumber, result);
+    }
+    
+    // Test invalid chunk length
+    {
+        const data = [_]u8{ 
+            0x4D, 0x54, 0x68, 0x64,  // "MThd" magic
+            0x00, 0x00, 0x00, 0x08,  // Length = 8 (should be 6)
+            0x00, 0x01,              // Format 1
+            0x00, 0x01,              // 1 track
+            0x00, 0x60               // 96 ticks per quarter note
+        };
+        const result = parseMidiHeader(&data);
+        try std.testing.expectError(error_mod.MidiError.InvalidHeaderLength, result);
+    }
+    
+    // Test invalid format
+    {
+        const data = [_]u8{ 
+            0x4D, 0x54, 0x68, 0x64,  // "MThd" magic
+            0x00, 0x00, 0x00, 0x06,  // Length = 6
+            0x00, 0x03,              // Format 3 (invalid)
+            0x00, 0x01,              // 1 track
+            0x00, 0x60               // 96 ticks per quarter note
+        };
+        const result = parseMidiHeader(&data);
+        try std.testing.expectError(error_mod.MidiError.InvalidHeaderLength, result);
+    }
+    
+    // Test Format 0 with wrong track count
+    {
+        const data = [_]u8{ 
+            0x4D, 0x54, 0x68, 0x64,  // "MThd" magic
+            0x00, 0x00, 0x00, 0x06,  // Length = 6
+            0x00, 0x00,              // Format 0
+            0x00, 0x02,              // 2 tracks (should be 1 for format 0)
+            0x00, 0x60               // 96 ticks per quarter note
+        };
+        const result = parseMidiHeader(&data);
+        try std.testing.expectError(error_mod.MidiError.InvalidHeaderLength, result);
+    }
+    
+    // Test zero track count
+    {
+        const data = [_]u8{ 
+            0x4D, 0x54, 0x68, 0x64,  // "MThd" magic
+            0x00, 0x00, 0x00, 0x06,  // Length = 6
+            0x00, 0x01,              // Format 1
+            0x00, 0x00,              // 0 tracks (invalid)
+            0x00, 0x60               // 96 ticks per quarter note
+        };
+        const result = parseMidiHeader(&data);
+        try std.testing.expectError(error_mod.MidiError.InvalidHeaderLength, result);
+    }
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+MIDI header parsing - error conditions

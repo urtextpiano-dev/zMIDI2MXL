@@ -1,0 +1,79 @@
+# Function Analysis: test_Text_event_parsing_-_performance_target
+
+## Metadata
+- **File**: `src/midi/parser.zig`
+- **Lines**: 5331-5370 (40 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "Text event parsing - performance target" {`
+
+## Function Content
+```zig
+test "Text event parsing - performance target" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    
+    // Create track with many text events for performance testing
+    var track_data = std.ArrayList(u8).init(allocator);
+    defer track_data.deinit();
+    
+    // Add 100 text events
+    for (0..100) |i| {
+        try track_data.append(0x00);     // Delta time: 0
+        try track_data.append(0xFF);     // Meta event
+        try track_data.append(0x01);     // Text event type
+        try track_data.append(0x04);     // Length: 4 bytes
+        try track_data.appendSlice(&[_]u8{ 'T', 'e', 's', 't' }); // "Test"
+        _ = i; // suppress unused warning
+    }
+    try track_data.appendSlice(&[_]u8{ 0x00, 0xFF, 0x2F, 0x00 }); // End of track
+    
+    const start_time = std.time.nanoTimestamp();
+    
+    var result = try parseTrackEvents(allocator, track_data.items);
+    defer result.deinit(allocator);
+    
+    const end_time = std.time.nanoTimestamp();
+    const elapsed_ns = end_time - start_time;
+    const ns_per_meta_event = @as(f64, @floatFromInt(elapsed_ns)) / 100.0;
+    
+    // Should have parsed 100 text events
+    try std.testing.expectEqual(@as(usize, 100), result.text_events.items.len);
+    
+    // Performance target: < 10μs per text meta event (including UTF-8 validation and memory allocation)
+    // This is higher than the general 100ns target because text events require UTF-8 validation
+    // and dynamic memory allocation for storing the text data
+    // Note: Performance may vary based on system and memory allocator, so we just log the results
+    // try std.testing.expect(ns_per_meta_event < 10000.0);
+    
+    std.debug.print("\nText Event Performance: {d:.2}ns per meta event (target: <10μs)\n", .{ns_per_meta_event});
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+Text event parsing - performance target

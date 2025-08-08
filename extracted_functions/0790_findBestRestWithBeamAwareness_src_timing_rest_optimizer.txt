@@ -1,0 +1,130 @@
+# Function Analysis: findBestRestWithBeamAwareness
+
+## Metadata
+- **File**: `src/timing/rest_optimizer.zig`
+- **Lines**: 347-440 (94 lines)
+- **Type**: function
+- **Visibility**: private
+- **Signature**: `fn findBestRestWithBeamAwareness(self: *RestOptimizer, start_time: u32, max_duration: u32, measure_number: u32, time_sig: TimeSignature, beam_constraints: ?[]const BeamGroupConstraint) !Rest {`
+
+## Function Content
+```zig
+    fn findBestRestWithBeamAwareness(self: *RestOptimizer, start_time: u32, max_duration: u32, measure_number: u32, time_sig: TimeSignature, beam_constraints: ?[]const BeamGroupConstraint) !Rest {
+        // For beam-aware processing, we use stricter alignment rules
+        var best_rest: ?Rest = null;
+        var best_score: f32 = -std.math.inf(f32);
+        
+        // Special case: empty measure gets whole rest regardless of beam constraints
+        const position_in_measure = start_time % time_sig.measure_duration;
+        if (position_in_measure == 0 and max_duration >= time_sig.measure_duration) {
+            return Rest{
+                .start_time = start_time,
+                .duration = time_sig.measure_duration,
+                .note_type = .whole,
+                .dots = 0,
+                .alignment_score = 10.0,
+                .measure_number = measure_number,
+            };
+        }
+        
+        // Try each rest value from largest to smallest
+        const rest_types = [_]NoteType{
+            .whole, .half, .quarter, .eighth,
+            .@"16th", .@"32nd", .@"64th",
+        };
+        
+        for (rest_types) |rest_type| {
+            // Try without dots first
+            const base_duration = rest_type.getDurationInDivisions(self.divisions_per_quarter);
+            if (base_duration <= max_duration) {
+                const score = self.computeRestScoreWithBeamAwareness(start_time, base_duration, rest_type, 0, time_sig, beam_constraints);
+                if (score > best_score) {
+                    best_score = score;
+                    best_rest = Rest{
+                        .start_time = start_time,
+                        .duration = base_duration,
+                        .note_type = rest_type,
+                        .dots = 0,
+                        .alignment_score = score,
+                        .measure_number = measure_number,
+                    };
+                }
+            }
+            
+            // Try with dots if allowed
+            if (self.config.allow_dotted_rests) {
+                var dots: u8 = 1;
+                while (dots <= self.config.max_dots) : (dots += 1) {
+                    const dotted_duration = self.calculateDottedDuration(base_duration, dots);
+                    if (dotted_duration <= max_duration) {
+                        const score = self.computeRestScoreWithBeamAwareness(start_time, dotted_duration, rest_type, dots, time_sig, beam_constraints);
+                        if (score > best_score) {
+                            best_score = score;
+                            best_rest = Rest{
+                                .start_time = start_time,
+                                .duration = dotted_duration,
+                                .note_type = rest_type,
+                                .dots = dots,
+                                .alignment_score = score,
+                                .measure_number = measure_number,
+                            };
+                        }
+                    }
+                }
+            }
+        }
+        
+        // If no good rest found, use the largest that fits
+        if (best_rest == null) {
+            for (rest_types) |rest_type| {
+                const duration = rest_type.getDurationInDivisions(self.divisions_per_quarter);
+                if (duration <= max_duration) {
+                    return Rest{
+                        .start_time = start_time,
+                        .duration = duration,
+                        .note_type = rest_type,
+                        .dots = 0,
+                        .alignment_score = 0.0,
+                        .measure_number = measure_number,
+                    };
+                }
+            }
+            
+            // Last resort: use smallest rest
+            return Rest{
+                .start_time = start_time,
+                .duration = self.divisions_per_quarter / 64, // 256th note
+                .note_type = .@"256th",
+                .dots = 0,
+                .alignment_score = 0.0,
+                .measure_number = measure_number,
+            };
+        }
+        
+        return best_rest.?;
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

@@ -1,0 +1,67 @@
+# Function Analysis: test_TupletDetector_-_performance_benchmark
+
+## Metadata
+- **File**: `src/timing/tuplet_detector.zig`
+- **Lines**: 594-621 (28 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "TupletDetector - performance benchmark" {`
+
+## Function Content
+```zig
+test "TupletDetector - performance benchmark" {
+    const allocator = std.testing.allocator;
+    const detector = TupletDetector.init(allocator, 480);
+    
+    // Create test data for performance measurement
+    const notes = [_]measure_detector.TimedNote{
+        .{ .start_tick = 0, .duration = 80, .note = 60, .channel = 0, .velocity = 100 },
+        .{ .start_tick = 80, .duration = 80, .note = 62, .channel = 0, .velocity = 100 },
+        .{ .start_tick = 160, .duration = 80, .note = 64, .channel = 0, .velocity = 100 },
+    };
+    
+    const iterations = 1000;
+    const start = std.time.nanoTimestamp();
+    
+    for (0..iterations) |_| {
+        const tuplets = try detector.detectTupletsInBeat(&notes, 0, 240);
+        allocator.free(tuplets);
+    }
+    
+    const end = std.time.nanoTimestamp();
+    const elapsed_ns = @as(u64, @intCast(end - start));
+    const ns_per_iteration = elapsed_ns / iterations;
+    
+    std.debug.print("Tuplet detection performance: {d} ns per beat\n", .{ns_per_iteration});
+    
+    // Should be well under 500μs (500,000ns) per beat
+    try std.testing.expect(ns_per_iteration < 500_000);
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+TupletDetector - performance benchmark

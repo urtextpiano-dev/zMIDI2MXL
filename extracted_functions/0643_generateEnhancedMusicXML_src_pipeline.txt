@@ -1,0 +1,71 @@
+# Function Analysis: generateEnhancedMusicXML
+
+## Metadata
+- **File**: `src/pipeline.zig`
+- **Lines**: 838-872 (35 lines)
+- **Type**: function
+- **Visibility**: private
+- **Signature**: `fn generateEnhancedMusicXML(`
+
+## Function Content
+```zig
+    fn generateEnhancedMusicXML(
+        self: *Pipeline, 
+        generator: *mxl_generator.Generator, 
+        writer: anytype, 
+        enhanced_notes: []const enhanced_note.EnhancedTimedNote,
+        container: *const multi_track.MultiTrackContainer,
+        global_chords: ?[]const chord_detector.ChordGroup
+    ) !void {
+        // Extract actual tempo from MIDI data - implements TASK-2.1
+        const tempo_f64 = container.getInitialTempo();
+        const tempo_bpm: u32 = @intFromFloat(@round(tempo_f64));
+        
+        // Extract key signature from conductor track (track 0) - FIX-2.1
+        var key_fifths: i8 = 0; // Default to C major
+        if (container.tracks.items.len > 0) {
+            const conductor_track = container.tracks.items[0];
+            if (conductor_track.key_signature_events.items.len > 0) {
+                key_fifths = conductor_track.key_signature_events.items[0].sharps_flats;
+            }
+        }
+        
+        generator.generateMusicXMLFromEnhancedNotes(writer, enhanced_notes, tempo_bpm, global_chords, key_fifths) catch |err| {
+            if (self.config.educational.enable_error_recovery) {
+                // Fall back to basic generation if enhanced generation fails
+                // Pass tempo information to fallback generation per TASK 2.2
+                // CRITICAL FIX: Convert to TimedNotes to preserve duration
+                const timed_notes = try self.convertEnhancedToTimedNotes(enhanced_notes);
+                defer self.allocator.free(timed_notes);
+                
+                try generator.generateMusicXMLWithMeasureBoundaries(writer, timed_notes, tempo_bpm);
+            } else {
+                return err;
+            }
+        };
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

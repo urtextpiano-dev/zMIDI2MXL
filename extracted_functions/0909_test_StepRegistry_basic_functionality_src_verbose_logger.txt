@@ -1,0 +1,71 @@
+# Function Analysis: test_StepRegistry_basic_functionality
+
+## Metadata
+- **File**: `src/verbose_logger.zig`
+- **Lines**: 1785-1816 (32 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "StepRegistry basic functionality" {`
+
+## Function Content
+```zig
+test "StepRegistry basic functionality" {
+    var registry = StepRegistry.init(std.testing.allocator);
+    defer registry.deinit();
+    
+    // Test step marking
+    try std.testing.expect(!registry.wasExecuted(.INIT_START));
+    registry.markExecuted(.INIT_START);
+    try std.testing.expect(registry.wasExecuted(.INIT_START));
+    
+    // Test step marking with timing
+    registry.markExecutedWithTiming(.INIT_PARSE_ARGS, 1_500_000); // 1.5ms
+    try std.testing.expect(registry.wasExecuted(.INIT_PARSE_ARGS));
+    
+    const execution = registry.getStepExecution(.INIT_PARSE_ARGS);
+    try std.testing.expect(execution != null);
+    try std.testing.expectEqual(@as(u64, 1_500_000), execution.?.duration_ns);
+    
+    // Test failed step marking
+    registry.markFailed(.FILE_OPEN, "File not found");
+    try std.testing.expect(!registry.wasExecuted(.FILE_OPEN));
+    
+    const failed_execution = registry.getStepExecution(.FILE_OPEN);
+    try std.testing.expect(failed_execution != null);
+    try std.testing.expect(!failed_execution.?.executed);
+    try std.testing.expect(failed_execution.?.error_info != null);
+    
+    // Test statistics
+    const stats = registry.getExecutionStats();
+    try std.testing.expectEqual(@as(u32, 2), stats.executed_count);
+    try std.testing.expectEqual(@as(u32, 1), stats.failed_count);
+    try std.testing.expect(stats.total_execution_time_ns >= 1_500_000);
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+StepRegistry basic functionality

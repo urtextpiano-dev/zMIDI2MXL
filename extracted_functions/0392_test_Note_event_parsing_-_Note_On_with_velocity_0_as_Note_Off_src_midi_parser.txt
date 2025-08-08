@@ -1,0 +1,69 @@
+# Function Analysis: test_Note_event_parsing_-_Note_On_with_velocity_0_as_Note_Off
+
+## Metadata
+- **File**: `src/midi/parser.zig`
+- **Lines**: 2651-2680 (30 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "Note event parsing - Note On with velocity 0 as Note Off" {`
+
+## Function Content
+```zig
+test "Note event parsing - Note On with velocity 0 as Note Off" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    
+    // Note On with velocity 0 should be treated as Note Off
+    const track_data = [_]u8{
+        0x00,              // Delta time: 0
+        0x90, 0x3C, 0x64,  // Note On, C4, Velocity 100
+        0x60,              // Delta time: 96 ticks
+        0x90, 0x3C, 0x00,  // Note On, C4, Velocity 0 (= Note Off)
+        0x00,              // Delta time: 0
+        0xFF, 0x2F, 0x00,  // End of Track
+    };
+    
+    var result = try parseTrackEvents(allocator, &track_data);
+    defer result.deinit(allocator);
+    
+    try std.testing.expectEqual(@as(usize, 2), result.note_events.items.len);
+    
+    // First event should be Note On
+    try std.testing.expect(result.note_events.items[0].isNoteOn());
+    
+    // Second event should be Note Off (velocity 0)
+    const note_off = result.note_events.items[1];
+    try std.testing.expectEqual(MidiEventType.note_on, note_off.event_type);
+    try std.testing.expectEqual(@as(u8, 0), note_off.velocity);
+    try std.testing.expect(!note_off.isNoteOn());
+    try std.testing.expect(note_off.isNoteOff());
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+Note event parsing - Note On with velocity 0 as Note Off

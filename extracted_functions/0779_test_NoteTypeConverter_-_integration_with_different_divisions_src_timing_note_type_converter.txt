@@ -1,0 +1,65 @@
+# Function Analysis: test_NoteTypeConverter_-_integration_with_different_divisions
+
+## Metadata
+- **File**: `src/timing/note_type_converter.zig`
+- **Lines**: 453-478 (26 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "NoteTypeConverter - integration with different divisions" {`
+
+## Function Content
+```zig
+test "NoteTypeConverter - integration with different divisions" {
+    // Test with various common division values
+    const division_values = [_]u32{ 96, 192, 384, 480, 768, 960 };
+    
+    for (division_values) |divisions| {
+        const converter = NoteTypeConverter.init(divisions);
+        
+        // Quarter note should always be exactly the divisions value
+        const quarter_result = converter.convertDurationToNoteType(divisions);
+        try std.testing.expect(quarter_result != null);
+        try std.testing.expectEqual(NoteType.quarter, quarter_result.?.note_type);
+        try std.testing.expectEqual(@as(u8, 0), quarter_result.?.dots);
+        
+        // Whole note should be 4x divisions (corrected multiplier)
+        const whole_result = converter.convertDurationToNoteType(divisions * 4);
+        try std.testing.expect(whole_result != null);
+        try std.testing.expectEqual(NoteType.whole, whole_result.?.note_type);
+        try std.testing.expectEqual(@as(u8, 0), whole_result.?.dots);
+        
+        // Breve should be 8x divisions (corrected multiplier)
+        const breve_result = converter.convertDurationToNoteType(divisions * 8);
+        try std.testing.expect(breve_result != null);
+        try std.testing.expectEqual(NoteType.breve, breve_result.?.note_type);
+        try std.testing.expectEqual(@as(u8, 0), breve_result.?.dots);
+    }
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+NoteTypeConverter - integration with different divisions

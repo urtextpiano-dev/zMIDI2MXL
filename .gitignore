@@ -1,0 +1,29 @@
+# Zig build artifacts
+zig-cache/
+zig-out/
+build/
+build-*/
+.zig-cache/
+
+# Object files
+*.o
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test outputs
+*.mxl
+test-output/
+test_minimal.xml
+
+# Documentation build
+docs/build/
+

@@ -1,0 +1,66 @@
+# Function Analysis: test_Text_event_parsing_-_basic_text_event
+
+## Metadata
+- **File**: `src/midi/parser.zig`
+- **Lines**: 5136-5162 (27 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "Text event parsing - basic text event" {`
+
+## Function Content
+```zig
+test "Text event parsing - basic text event" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    
+    // Track with a simple text event
+    const track_data = [_]u8{
+        0x00,                             // Delta time: 0
+        0xFF, 0x01, 0x05,                 // Text event (type 01), 5 bytes
+        'H', 'e', 'l', 'l', 'o',         // "Hello"
+        0x00,                             // Delta time: 0
+        0xFF, 0x2F, 0x00,                 // End of track
+    };
+    
+    var result = try parseTrackEvents(allocator, &track_data);
+    defer result.deinit(allocator);
+    
+    // Should have parsed 1 text event
+    try std.testing.expectEqual(@as(usize, 1), result.text_events.items.len);
+    
+    const text_event = result.text_events.items[0];
+    try std.testing.expectEqual(@as(u32, 0), text_event.tick);
+    try std.testing.expectEqual(@as(u8, 0x01), text_event.event_type);
+    try std.testing.expectEqualStrings("Hello", text_event.text);
+    try std.testing.expect(text_event.isValidUtf8());
+    try std.testing.expectEqualStrings("Text", text_event.getTypeName());
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+Text event parsing - basic text event

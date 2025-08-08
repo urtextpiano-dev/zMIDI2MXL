@@ -1,0 +1,66 @@
+# Function Analysis: test_6/8_time_signature
+
+## Metadata
+- **File**: `src/timing/rest_optimizer.zig`
+- **Lines**: 929-955 (27 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "6/8 time signature" {`
+
+## Function Content
+```zig
+test "6/8 time signature" {
+    const allocator = testing.allocator;
+    var optimizer = RestOptimizer.init(allocator, 480);
+    
+    const time_sig = TimeSignature{
+        .numerator = 6,
+        .denominator = 8,
+        .measure_duration = 720,  // 6 eighths = 1.5 quarters
+        .beat_duration = 240,     // 1 eighth
+    };
+    
+    // Full measure in 6/8
+    const gaps = [_]Gap{
+        Gap{
+            .start_time = 0,
+            .duration = 720,
+            .measure_number = 1,
+        },
+    };
+    
+    const rests = try optimizer.optimizeRests(&gaps, time_sig);
+    defer allocator.free(rests);
+    
+    // Should use whole rest for empty measure even in 6/8
+    try testing.expectEqual(@as(usize, 1), rests.len);
+    try testing.expectEqual(NoteType.whole, rests[0].note_type);
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+6/8 time signature

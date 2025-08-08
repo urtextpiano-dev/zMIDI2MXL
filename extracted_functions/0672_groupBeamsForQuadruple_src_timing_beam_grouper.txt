@@ -1,0 +1,100 @@
+# Function Analysis: groupBeamsForQuadruple
+
+## Metadata
+- **File**: `src/timing/beam_grouper.zig`
+- **Lines**: 297-360 (64 lines)
+- **Type**: function
+- **Visibility**: private
+- **Signature**: `fn groupBeamsForQuadruple(`
+
+## Function Content
+```zig
+    fn groupBeamsForQuadruple(
+        self: *const BeamGrouper,
+        notes: []BeamedNote,
+        beat_length: u32,
+        beats_per_measure: u8,
+    ) ![]BeamGroup {
+        _ = beat_length;
+        _ = beats_per_measure;
+        const alloc = if (self.educational_arena) |arena| arena.allocator() else self.allocator;
+        var groups = std.ArrayList(BeamGroup).init(alloc);
+        errdefer {
+            for (groups.items) |*group| {
+                group.deinit();
+            }
+            groups.deinit();
+        }
+        
+        var current_group_idx: ?usize = null;
+        
+        for (notes) |note| {
+            if (!note.can_beam) {
+                // End current group if exists
+                current_group_idx = null;
+                continue;
+            }
+            
+            const beat_number = @as(u32, @intFromFloat(@floor(note.beat_position)));
+            const note_duration_beats = getBeatDuration(note.note_type, note.note.duration);
+            const note_end_beat = note.beat_position + note_duration_beats;
+            
+            // Check if note crosses beat boundary
+            const crosses_beat = @as(u32, @intFromFloat(@floor(note_end_beat))) > beat_number;
+            
+            if (current_group_idx) |idx| {
+                var group = &groups.items[idx];
+                // Check if we should end the current group
+                const should_end_group = 
+                    // Crossing into beat 3 (major division in 4/4)
+                    (beat_number >= 2 and group.start_beat < 2) or
+                    // Crossing any beat boundary for readability
+                    crosses_beat or
+                    // Group is getting too long (max 4 eighth notes)
+                    (group.notes.items.len >= 4 and note.note_type.note_type == .eighth);
+                
+                if (should_end_group) {
+                    // Start a new group
+                    var new_group = BeamGroup.init(alloc);
+                    try new_group.addNote(note);
+                    try groups.append(new_group);
+                    current_group_idx = groups.items.len - 1;
+                } else {
+                    try group.addNote(note);
+                }
+            } else {
+                // Start a new group
+                var new_group = BeamGroup.init(alloc);
+                try new_group.addNote(note);
+                try groups.append(new_group);
+                current_group_idx = groups.items.len - 1;
+            }
+        }
+        
+        return try groups.toOwnedSlice();
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

@@ -1,0 +1,79 @@
+# Function Analysis: groupNotesByVoice
+
+## Metadata
+- **File**: `src/mxl/generator.zig`
+- **Lines**: 1274-1316 (43 lines)
+- **Type**: function
+- **Visibility**: public
+- **Signature**: `pub fn groupNotesByVoice(`
+
+## Function Content
+```zig
+    pub fn groupNotesByVoice(
+        self: *const Generator,
+        allocator: std.mem.Allocator,
+        notes: []const enhanced_note.EnhancedTimedNote,
+    ) !std.ArrayList(VoiceGroup) {
+        _ = self; // Unused parameter
+
+        // Use a hash map to collect notes by voice number
+        var voice_map = std.AutoHashMap(u8, VoiceGroup).init(allocator);
+        defer voice_map.deinit();
+
+        // Group notes by voice number
+        for (notes) |note| {
+            // Get voice number from TimedNote, default to 1 if unassigned
+            const voice_num = if (note.base_note.voice > 0) note.base_note.voice else 1;
+
+            // Get or create voice group for this voice number
+            const result = try voice_map.getOrPut(voice_num);
+            if (!result.found_existing) {
+                result.value_ptr.* = VoiceGroup.init(allocator, voice_num);
+            }
+
+            // Add note to the voice group
+            try result.value_ptr.addNote(note);
+        }
+
+        // Convert hash map to sorted array list
+        var voice_groups = std.ArrayList(VoiceGroup).init(allocator);
+        var iterator = voice_map.iterator();
+        while (iterator.next()) |entry| {
+            try voice_groups.append(entry.value_ptr.*);
+        }
+
+        // Sort voice groups by voice number for consistent output
+        // This ensures voices are processed in order: 1, 2, 5, 6, etc.
+        std.sort.insertion(VoiceGroup, voice_groups.items, {}, struct {
+            fn lessThan(_: void, a: VoiceGroup, b: VoiceGroup) bool {
+                return a.voice_number < b.voice_number;
+            }
+        }.lessThan);
+
+        return voice_groups;
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

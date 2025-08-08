@@ -1,0 +1,82 @@
+# Function Analysis: generateMinimalMusicXML
+
+## Metadata
+- **File**: `src/mxl/generator.zig`
+- **Lines**: 361-406 (46 lines)
+- **Type**: function
+- **Visibility**: public
+- **Signature**: `pub fn generateMinimalMusicXML(self: *const Generator, writer: anytype) !void {`
+
+## Function Content
+```zig
+    pub fn generateMinimalMusicXML(self: *const Generator, writer: anytype) !void {
+        var xml_writer = XmlWriter.init(self.allocator, writer.any());
+        defer xml_writer.deinit();
+
+        // Write XML declaration and DOCTYPE
+        try xml_writer.writeDeclaration();
+        try xml_writer.writeDoctype("score-partwise", "-//Recordare//DTD MusicXML 4.0 Partwise//EN", "http://www.musicxml.org/dtds/partwise.dtd");
+
+        // Start root element with version attribute
+        try xml_writer.startElement("score-partwise", &[_]Attribute{
+            .{ .name = "version", .value = "4.0" },
+        });
+
+        // Write part-list (required element)
+        try xml_writer.startElement("part-list", null);
+        try xml_writer.startElement("score-part", &[_]Attribute{
+            .{ .name = "id", .value = "P1" },
+        });
+        try xml_writer.writeElement("part-name", "Piano", null);
+        try xml_writer.endElement(); // score-part
+        try xml_writer.endElement(); // part-list
+
+        // Write part (required element)
+        try xml_writer.startElement("part", &[_]Attribute{
+            .{ .name = "id", .value = "P1" },
+        });
+
+        // Write measure with attributes (required for valid MusicXML)
+        try xml_writer.startElement("measure", &[_]Attribute{
+            .{ .name = "number", .value = "1" },
+        });
+
+        // Write attributes element with divisions (required)
+        try xml_writer.startElement("attributes", null);
+
+        // Format divisions as string using normalized divisions for professional output
+        // Implements EXECUTIVE MANDATE per critical timing accuracy issue
+        var divisions_buf: [32]u8 = undefined;
+        const divisions_str = try std.fmt.bufPrint(&divisions_buf, "{d}", .{self.quantizer.getNormalizedDivisions()});
+        try xml_writer.writeElement("divisions", divisions_str, null);
+
+        try xml_writer.endElement(); // attributes
+        try xml_writer.endElement(); // measure
+        try xml_writer.endElement(); // part
+        try xml_writer.endElement(); // score-partwise
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

@@ -1,0 +1,88 @@
+# Function Analysis: optimizeGapWithBeamAwareness
+
+## Metadata
+- **File**: `src/timing/rest_optimizer.zig`
+- **Lines**: 195-246 (52 lines)
+- **Type**: function
+- **Visibility**: private
+- **Signature**: `fn optimizeGapWithBeamAwareness(self: *RestOptimizer, gap: Gap, time_sig: TimeSignature, beam_constraints: ?[]const BeamGroupConstraint) ![]Rest {`
+
+## Function Content
+```zig
+    fn optimizeGapWithBeamAwareness(self: *RestOptimizer, gap: Gap, time_sig: TimeSignature, beam_constraints: ?[]const BeamGroupConstraint) ![]Rest {
+        // CRITICAL: Filter negligible gaps per EXECUTIVE AUTHORITY fix
+        // Tiny timing inaccuracies should be absorbed as measurement noise, not amplified to musical rests
+        if (gap.duration < MIN_MEANINGFUL_REST_THRESHOLD) {
+            return try self.allocator.alloc(Rest, 0); // No rest for tiny gaps
+        }
+        
+        var rests = std.ArrayList(Rest).init(self.allocator);
+        errdefer rests.deinit();
+        
+        var remaining_duration = gap.duration;
+        var current_position = gap.start_time;
+        
+        while (remaining_duration > 0) {
+            // Check for beam group constraints at current position
+            const max_duration_at_position = self.getMaxRestDurationAtPosition(
+                current_position,
+                remaining_duration,
+                beam_constraints,
+                time_sig,
+            );
+            
+            // Find the best rest for this position with beam constraints
+            const best_rest = try self.findBestRestWithBeamAwareness(
+                current_position,
+                max_duration_at_position,
+                gap.measure_number,
+                time_sig,
+                beam_constraints,
+            );
+            
+            if (best_rest.duration == 0) {
+                return RestOptimizationError.InvalidDuration;
+            }
+            
+            // Prevent integer underflow: ensure we don't subtract more than we have
+            if (best_rest.duration > remaining_duration) {
+                // Adjust the rest duration to not exceed remaining duration
+                var adjusted_rest = best_rest;
+                adjusted_rest.duration = remaining_duration;
+                try rests.append(adjusted_rest);
+                current_position += adjusted_rest.duration;
+                remaining_duration = 0;
+            } else {
+                try rests.append(best_rest);
+                current_position += best_rest.duration;
+                remaining_duration -= best_rest.duration;
+            }
+        }
+        
+        return rests.toOwnedSlice();
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

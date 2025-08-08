@@ -1,0 +1,65 @@
+# Function Analysis: test_stem_direction_in_basic_note_generation
+
+## Metadata
+- **File**: `src/mxl/generator.zig`
+- **Lines**: 2220-2245 (26 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "stem direction in basic note generation" {`
+
+## Function Content
+```zig
+test "stem direction in basic note generation" {
+    var buffer = std.ArrayList(u8).init(std.testing.allocator);
+    defer buffer.deinit();
+
+    const generator = Generator.init(std.testing.allocator, 480);
+    var xml_writer = XmlWriter.init(std.testing.allocator, buffer.writer().any());
+    defer xml_writer.deinit();
+
+    // Generate note below middle line (should have stem up)
+    try generator.generateNoteElement(&xml_writer, 60, 480, false); // C4
+
+    const output = buffer.items;
+
+    // Verify stem direction is included
+    try std.testing.expect(std.mem.indexOf(u8, output, "<stem>up</stem>") != null);
+
+    // Clear buffer and test note above middle line
+    buffer.clearRetainingCapacity();
+    xml_writer = XmlWriter.init(std.testing.allocator, buffer.writer().any());
+    defer xml_writer.deinit();
+
+    try generator.generateNoteElement(&xml_writer, 77, 480, false); // F5
+
+    const output2 = buffer.items;
+    try std.testing.expect(std.mem.indexOf(u8, output2, "<stem>down</stem>") != null);
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+stem direction in basic note generation

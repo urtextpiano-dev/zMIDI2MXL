@@ -1,0 +1,55 @@
+# Function Analysis: test_beam_group_stem_direction
+
+## Metadata
+- **File**: `src/mxl/stem_direction.zig`
+- **Lines**: 404-419 (16 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "beam group stem direction" {`
+
+## Function Content
+```zig
+test "beam group stem direction" {
+    // Test beam group with notes mostly below middle line
+    const notes_below = [_]u8{ 60, 64, 67 }; // C4, E4, G4 - all below middle
+    try std.testing.expectEqual(StemDirection.up, StemDirectionCalculator.calculateBeamGroupStemDirection(&notes_below));
+    
+    // Test beam group with notes mostly above middle line
+    const notes_above = [_]u8{ 74, 77, 79 }; // D5, F5, G5 - all above middle
+    try std.testing.expectEqual(StemDirection.down, StemDirectionCalculator.calculateBeamGroupStemDirection(&notes_above));
+    
+    // Test beam group spanning middle line - use extreme note rule
+    const notes_mixed = [_]u8{ 64, 71, 77 }; // E4, B4, F5 - spans middle line
+    // F5 (77) is farther from middle line (71) than E4 (64)
+    // Distance: F5 = 6 semitones, E4 = 7 semitones
+    // E4 is farther, so use its direction (up)
+    try std.testing.expectEqual(StemDirection.up, StemDirectionCalculator.calculateBeamGroupStemDirection(&notes_mixed));
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+beam group stem direction

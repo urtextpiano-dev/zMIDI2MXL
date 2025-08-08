@@ -1,0 +1,73 @@
+# Function Analysis: setDataEntry
+
+## Metadata
+- **File**: `src/midi/parser.zig`
+- **Lines**: 1602-1638 (37 lines)
+- **Type**: function
+- **Visibility**: public
+- **Signature**: `pub fn setDataEntry(self: *RpnState, msb: ?u7, lsb: ?u7) ?RpnEvent {`
+
+## Function Content
+```zig
+    pub fn setDataEntry(self: *RpnState, msb: ?u7, lsb: ?u7) ?RpnEvent {
+        if (msb) |msb_val| self.data_entry_msb = msb_val;
+        if (lsb) |lsb_val| self.data_entry_lsb = lsb_val;
+        
+        // We need at least MSB data entry to create an event
+        if (self.data_entry_msb == null) return null;
+        
+        const data_msb = self.data_entry_msb.?;
+        const data_lsb = self.data_entry_lsb orelse 0; // LSB defaults to 0
+        const value: u14 = (@as(u14, data_msb) << 7) | data_lsb;
+        
+        if (self.rpn_selected) {
+            if (self.current_rpn_msb != null and self.current_rpn_lsb != null) {
+                const parameter: u16 = (@as(u16, self.current_rpn_msb.?) << 7) | self.current_rpn_lsb.?;
+                return RpnEvent{
+                    .tick = 0, // Will be set by caller
+                    .channel = 0, // Will be set by caller
+                    .is_nrpn = false,
+                    .parameter = parameter,
+                    .value = value,
+                };
+            }
+        } else if (self.nrpn_selected) {
+            if (self.current_nrpn_msb != null and self.current_nrpn_lsb != null) {
+                const parameter: u16 = (@as(u16, self.current_nrpn_msb.?) << 7) | self.current_nrpn_lsb.?;
+                return RpnEvent{
+                    .tick = 0, // Will be set by caller
+                    .channel = 0, // Will be set by caller
+                    .is_nrpn = true,
+                    .parameter = parameter,
+                    .value = value,
+                };
+            }
+        }
+        
+        return null;
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

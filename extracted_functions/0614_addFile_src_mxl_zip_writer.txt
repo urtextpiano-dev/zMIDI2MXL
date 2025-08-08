@@ -1,0 +1,103 @@
+# Function Analysis: addFile
+
+## Metadata
+- **File**: `src/mxl/zip_writer.zig`
+- **Lines**: 101-167 (67 lines)
+- **Type**: function
+- **Visibility**: public
+- **Signature**: `pub fn addFile(`
+
+## Function Content
+```zig
+    pub fn addFile(
+        self: *ZipWriter,
+        filename: []const u8,
+        data: []const u8,
+        compress: bool,
+    ) !void {
+        // Validate inputs to prevent corruption
+        if (filename.len == 0) return error.InvalidFilename;
+        if (filename.len > 65535) return error.FilenameTooLong;
+        if (data.len > std.math.maxInt(u32)) return error.FileTooLarge;
+        // For simplicity, use a fixed date/time for now
+        // This can be enhanced later to use actual timestamps
+        // Date: 2024-01-01, Time: 12:00:00
+        const mod_date: u16 = ((2024 - 1980) << 9) | (1 << 5) | 1;  // Year 2024, Month 1, Day 1
+        const mod_time: u16 = (12 << 11) | (0 << 5) | 0;  // Hour 12, Minute 0, Second 0
+
+        const entry_offset = self.current_offset;
+        
+        // Compress data if requested
+        var compressed_data: []u8 = undefined;
+        var should_free = false;
+        const compression_method = if (compress and filename.len > 0 and !std.mem.eql(u8, filename, "mimetype")) blk: {
+            compressed_data = try self.compressDeflate(data);
+            should_free = true;
+            break :blk COMPRESSION_METHOD_DEFLATE;
+        } else blk: {
+            compressed_data = @constCast(data);
+            break :blk COMPRESSION_METHOD_STORE;
+        };
+        defer if (should_free) self.allocator.free(compressed_data);
+
+        // Calculate CRC-32 of uncompressed data
+        const crc32 = self.calculateCrc32(data);
+
+        // Write local file header
+        try self.writeLocalFileHeader(
+            filename,
+            crc32,
+            @intCast(compressed_data.len),
+            @intCast(data.len),
+            compression_method,
+            mod_time,
+            mod_date,
+        );
+
+        // Write file data
+        try self.writer.writeAll(compressed_data);
+        
+        // CRITICAL FIX: Update offset tracking after writing file data
+        // Implements TASK-010 per MXL_Architecture_Reference.md Section 7.4 lines 996-1022
+        // This prevents ZIP corruption from incorrect offset calculations
+        const new_offset = self.current_offset + @as(u32, @intCast(compressed_data.len));
+        if (new_offset < self.current_offset) return ZipError.OffsetOverflow; // Detect overflow
+        self.current_offset = new_offset;
+
+        // Store entry info for central directory
+        try self.entries.append(.{
+            .filename = try self.allocator.dupe(u8, filename),
+            .crc32 = crc32,
+            .compressed_size = @intCast(compressed_data.len),
+            .uncompressed_size = @intCast(data.len),
+            .offset = entry_offset,
+            .compression_method = compression_method,
+            .mod_time = mod_time,
+            .mod_date = mod_date,
+        });
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

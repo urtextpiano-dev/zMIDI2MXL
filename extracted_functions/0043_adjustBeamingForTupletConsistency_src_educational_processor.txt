@@ -1,0 +1,68 @@
+# Function Analysis: adjustBeamingForTupletConsistency
+
+## Metadata
+- **File**: `src/educational_processor.zig`
+- **Lines**: 2210-2241 (32 lines)
+- **Type**: function
+- **Visibility**: private
+- **Signature**: `fn adjustBeamingForTupletConsistency(self: *EducationalProcessor, notes: []enhanced_note.EnhancedTimedNote) !void {`
+
+## Function Content
+```zig
+    fn adjustBeamingForTupletConsistency(self: *EducationalProcessor, notes: []enhanced_note.EnhancedTimedNote) !void {
+        
+        // Ensure all notes in a tuplet have consistent beaming
+        var tuplet_start: ?usize = null;
+        var current_tuplet: ?*const tuplet_detector.Tuplet = null;
+        
+        for (notes, 0..) |*note, i| {
+            if (note.tuplet_info) |info| {
+                if (info.tuplet != current_tuplet) {
+                    // Process previous tuplet if any
+                    if (tuplet_start) |start| {
+                        self.ensureConsistentBeamingInRange(notes[start..i]);
+                    }
+                    
+                    tuplet_start = i;
+                    current_tuplet = info.tuplet;
+                }
+            } else if (tuplet_start != null) {
+                // End of tuplet
+                if (tuplet_start) |start| {
+                    self.ensureConsistentBeamingInRange(notes[start..i]);
+                }
+                tuplet_start = null;
+                current_tuplet = null;
+            }
+        }
+        
+        // Handle final tuplet if any
+        if (tuplet_start) |start| {
+            self.ensureConsistentBeamingInRange(notes[start..]);
+        }
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

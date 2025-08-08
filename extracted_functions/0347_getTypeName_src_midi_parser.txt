@@ -1,0 +1,50 @@
+# Function Analysis: getTypeName
+
+## Metadata
+- **File**: `src/midi/parser.zig`
+- **Lines**: 1408-1421 (14 lines)
+- **Type**: function
+- **Visibility**: public
+- **Signature**: `pub fn getTypeName(self: TextEvent) []const u8 {`
+
+## Function Content
+```zig
+    pub fn getTypeName(self: TextEvent) []const u8 {
+        return switch (self.event_type) {
+            0x01 => "Text",
+            0x02 => "Copyright",
+            0x03 => "Track Name",
+            0x04 => "Instrument Name",
+            0x05 => "Lyric",
+            0x06 => "Marker",
+            0x07 => "Cue Point",
+            0x08 => "Program Name",
+            0x09 => "Device Name",
+            else => "Text Event",
+        };
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

@@ -1,0 +1,92 @@
+# Function Analysis: buildRestSpans
+
+## Metadata
+- **File**: `src/educational_processor.zig`
+- **Lines**: 2414-2469 (56 lines)
+- **Type**: function
+- **Visibility**: private
+- **Signature**: `fn buildRestSpans(self: *EducationalProcessor, enhanced_notes: []enhanced_note.EnhancedTimedNote) ![]RestSpan {`
+
+## Function Content
+```zig
+    fn buildRestSpans(self: *EducationalProcessor, enhanced_notes: []enhanced_note.EnhancedTimedNote) ![]RestSpan {
+        var spans = std.ArrayList(RestSpan).init(self.arena.allocator());
+        defer spans.deinit();
+        errdefer {
+            for (spans.items) |*span| {
+                span.deinit();
+            }
+        }
+        
+        var current_rest_start: ?u32 = null;
+        var current_span: ?*RestSpan = null;
+        
+        for (enhanced_notes, 0..) |note, i| {
+            const is_rest = note.base_note.velocity == 0;
+            
+            if (is_rest) {
+                if (current_rest_start == null) {
+                    // Start new rest span
+                    var new_span = RestSpan{
+                        .start_tick = note.base_note.start_tick,
+                        .end_tick = note.base_note.start_tick + note.base_note.duration,
+                        .note_indices = std.ArrayList(usize).init(self.arena.allocator()),
+                        .is_optimized_rest = if (note.rest_info) |info| info.is_optimized_rest else false,
+                    };
+                    try new_span.note_indices.append(i);
+                    try spans.append(new_span);
+                    current_span = &spans.items[spans.items.len - 1];
+                    current_rest_start = note.base_note.start_tick;
+                } else if (current_span) |span| {
+                    // Continue current rest span if adjacent
+                    if (note.base_note.start_tick <= span.end_tick) {
+                        try span.note_indices.append(i);
+                        span.end_tick = @max(span.end_tick, note.base_note.start_tick + note.base_note.duration);
+                    } else {
+                        // Gap in rests - start new span
+                        var new_span = RestSpan{
+                            .start_tick = note.base_note.start_tick,
+                            .end_tick = note.base_note.start_tick + note.base_note.duration,
+                            .note_indices = std.ArrayList(usize).init(self.arena.allocator()),
+                            .is_optimized_rest = if (note.rest_info) |info| info.is_optimized_rest else false,
+                        };
+                        try new_span.note_indices.append(i);
+                        try spans.append(new_span);
+                        current_span = &spans.items[spans.items.len - 1];
+                        current_rest_start = note.base_note.start_tick;
+                    }
+                }
+            } else {
+                // Non-rest note ends any current rest span
+                current_rest_start = null;
+                current_span = null;
+            }
+        }
+        
+        return try spans.toOwnedSlice();
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

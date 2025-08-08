@@ -1,0 +1,86 @@
+# Function Analysis: test_Key_signature_parsing_-_invalid_data_handling
+
+## Metadata
+- **File**: `src/midi/parser.zig`
+- **Lines**: 4086-4132 (47 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "Key signature parsing - invalid data handling" {`
+
+## Function Content
+```zig
+test "Key signature parsing - invalid data handling" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    
+    // Test invalid sharps/flats value (> 7)
+    {
+        const track_data = [_]u8{
+            0x00,                          // Delta time: 0
+            0xFF, 0x59, 0x02,             // Key Signature meta event
+            0x08, 0x01,                   // Invalid: 8 sharps
+            0x00,                          // Delta time: 0
+            0xFF, 0x2F, 0x00,             // End of Track
+        };
+        
+        const result = parseTrackEvents(allocator, &track_data);
+        try std.testing.expectError(error_mod.MidiError.InvalidEventData, result);
+    }
+    
+    // Test invalid sharps/flats value (< -7)
+    {
+        const track_data = [_]u8{
+            0x00,                          // Delta time: 0
+            0xFF, 0x59, 0x02,             // Key Signature meta event
+            0xF8, 0x01,                   // Invalid: -8 flats
+            0x00,                          // Delta time: 0
+            0xFF, 0x2F, 0x00,             // End of Track
+        };
+        
+        const result = parseTrackEvents(allocator, &track_data);
+        try std.testing.expectError(error_mod.MidiError.InvalidEventData, result);
+    }
+    
+    // Test invalid major/minor value (> 1)
+    {
+        const track_data = [_]u8{
+            0x00,                          // Delta time: 0
+            0xFF, 0x59, 0x02,             // Key Signature meta event
+            0x00, 0x02,                   // Invalid: mi value of 2
+            0x00,                          // Delta time: 0
+            0xFF, 0x2F, 0x00,             // End of Track
+        };
+        
+        const result = parseTrackEvents(allocator, &track_data);
+        try std.testing.expectError(error_mod.MidiError.InvalidEventData, result);
+    }
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+Key signature parsing - invalid data handling

@@ -1,0 +1,64 @@
+# Function Analysis: test_NoteAttributeGenerator_-_write_tempo_direction
+
+## Metadata
+- **File**: `src/mxl/note_attributes.zig`
+- **Lines**: 377-401 (25 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "NoteAttributeGenerator - write tempo direction" {`
+
+## Function Content
+```zig
+test "NoteAttributeGenerator - write tempo direction" {
+    const allocator = std.testing.allocator;
+    var buffer = std.ArrayList(u8).init(allocator);
+    defer buffer.deinit();
+    
+    const attr_generator = NoteAttributeGenerator.init(allocator, 480);
+    var xml_writer = XmlWriter.init(allocator, buffer.writer().any());
+    defer xml_writer.deinit();
+    
+    // Test tempo marking at 120 BPM
+    const tempo_marking = TempoMarking{
+        .bpm = 120.0,
+        .beat_unit = "quarter",
+    };
+    
+    try attr_generator.writeTempoDirection(&xml_writer, &tempo_marking, "above");
+    
+    const output = buffer.items;
+    try std.testing.expect(std.mem.indexOf(u8, output, "<direction placement=\"above\">") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "<direction-type>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "<metronome>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "<beat-unit>quarter</beat-unit>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "<per-minute>120.0</per-minute>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "<sound tempo=\"120.0\">") != null);
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+NoteAttributeGenerator - write tempo direction

@@ -1,0 +1,53 @@
+# Function Analysis: markExecutedWithTiming
+
+## Metadata
+- **File**: `src/verbose_logger.zig`
+- **Lines**: 576-592 (17 lines)
+- **Type**: function
+- **Visibility**: public
+- **Signature**: `pub fn markExecutedWithTiming(self: *StepRegistry, step: PipelineSteps, duration_ns: u64) void {`
+
+## Function Content
+```zig
+    pub fn markExecutedWithTiming(self: *StepRegistry, step: PipelineSteps, duration_ns: u64) void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        
+        const current_time = @as(i64, @intCast(std.time.nanoTimestamp()));
+        const execution_time = current_time - self.start_time;
+        
+        const result = self.executed_steps.getOrPut(step) catch return;
+        if (!result.found_existing) {
+            result.value_ptr.* = StepExecution{};
+        }
+        
+        result.value_ptr.executed = true;
+        result.value_ptr.execution_time_ns = execution_time;
+        result.value_ptr.duration_ns = duration_ns;
+        result.value_ptr.is_required = self.isRequiredStep(step);
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

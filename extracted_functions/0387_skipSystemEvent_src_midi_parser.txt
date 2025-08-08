@@ -1,0 +1,61 @@
+# Function Analysis: skipSystemEvent
+
+## Metadata
+- **File**: `src/midi/parser.zig`
+- **Lines**: 2524-2548 (25 lines)
+- **Type**: function
+- **Visibility**: private
+- **Signature**: `fn skipSystemEvent(state: *TrackParserState, status_byte: u8) error_mod.MidiError!bool {`
+
+## Function Content
+```zig
+fn skipSystemEvent(state: *TrackParserState, status_byte: u8) error_mod.MidiError!bool {
+    switch (status_byte) {
+        0xF1 => { // MTC Quarter Frame (1 data byte)
+            if (state.remainingBytes() < 1) return error_mod.MidiError.UnexpectedEndOfFile;
+            state.position += 1;
+        },
+        0xF2 => { // Song Position Pointer (2 data bytes)
+            if (state.remainingBytes() < 2) return error_mod.MidiError.UnexpectedEndOfFile;
+            state.position += 2;
+        },
+        0xF3 => { // Song Select (1 data byte)
+            if (state.remainingBytes() < 1) return error_mod.MidiError.UnexpectedEndOfFile;
+            state.position += 1;
+        },
+        0xF6, 0xF8, 0xFA, 0xFB, 0xFC, 0xFE => { // No data bytes
+            // These events have no data bytes
+        },
+        else => {
+            // Unknown system event - skip 1 byte conservatively
+            if (state.remainingBytes() < 1) return error_mod.MidiError.UnexpectedEndOfFile;
+            state.position += 1;
+        },
+    }
+    return false;
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

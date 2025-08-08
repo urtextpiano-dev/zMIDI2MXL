@@ -1,0 +1,52 @@
+# Function Analysis: setRestInfo
+
+## Metadata
+- **File**: `src/timing/enhanced_note.zig`
+- **Lines**: 277-292 (16 lines)
+- **Type**: function
+- **Visibility**: public
+- **Signature**: `pub fn setRestInfo(self: *EnhancedTimedNote, rest_info: RestInfo) EnhancedNoteError!void {`
+
+## Function Content
+```zig
+    pub fn setRestInfo(self: *EnhancedTimedNote, rest_info: RestInfo) EnhancedNoteError!void {
+        if (self.arena == null) return EnhancedNoteError.NullArena;
+        
+        if (self.rest_info == null) {
+            self.arena.?.beginPhase(.rest_optimization);
+            defer self.arena.?.endPhase();
+            
+            const allocated_info = self.arena.?.allocForEducational(RestInfo, 1) catch {
+                return EnhancedNoteError.AllocationFailure;
+            };
+            self.rest_info = &allocated_info[0];
+        }
+        
+        self.rest_info.?.* = rest_info;
+        self.processing_flags.rest_processed = true;
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

@@ -1,0 +1,97 @@
+# Function Analysis: test_BeamGrouper_-_educational_arena_integration
+
+## Metadata
+- **File**: `src/timing/beam_grouper.zig`
+- **Lines**: 887-944 (58 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "BeamGrouper - educational arena integration" {`
+
+## Function Content
+```zig
+test "BeamGrouper - educational arena integration" {
+    // Test TASK-INT-008 memory management improvements
+    var edu_arena = arena_mod.EducationalArena.init(std.testing.allocator, true, false);
+    defer edu_arena.deinit();
+    
+    const grouper = BeamGrouper.initWithArena(&edu_arena, 480);
+    
+    // Create a test measure in 4/4
+    const time_sig = midi_parser.TimeSignatureEvent{
+        .tick = 0,
+        .numerator = 4,
+        .denominator_power = 2,
+        .clocks_per_metronome = 24,
+        .thirtysecond_notes_per_quarter = 8,
+    };
+    
+    var measure = measure_detector.Measure.init(edu_arena.allocator(), 1, 0, 1920, time_sig);
+    defer measure.deinit();
+    
+    // Add test notes
+    const notes = [_]measure_detector.TimedNote{
+        .{ .note = 60, .channel = 0, .velocity = 80, .start_tick = 0, .duration = 240 },
+        .{ .note = 62, .channel = 0, .velocity = 80, .start_tick = 240, .duration = 240 },
+        .{ .note = 64, .channel = 0, .velocity = 80, .start_tick = 480, .duration = 240 },
+        .{ .note = 65, .channel = 0, .velocity = 80, .start_tick = 720, .duration = 240 },
+    };
+    
+    for (notes) |note| {
+        try measure.addNote(note);
+    }
+    
+    const note_types = [_]note_type_converter.NoteTypeResult{
+        .{ .note_type = .eighth, .dots = 0 },
+        .{ .note_type = .eighth, .dots = 0 },
+        .{ .note_type = .eighth, .dots = 0 },
+        .{ .note_type = .eighth, .dots = 0 },
+    };
+    
+    // Test beam grouping with educational arena
+    const groups = try grouper.groupBeamsInMeasure(&measure, &note_types);
+    defer {
+        for (groups) |*group| {
+            group.deinit();
+        }
+        edu_arena.allocator().free(groups);
+    }
+    
+    // Verify results
+    try std.testing.expect(groups.len >= 1);
+    
+    // Check phase metrics
+    const metrics = edu_arena.getMetrics();
+    const beam_idx = @intFromEnum(arena_mod.EducationalPhase.beam_grouping);
+    try std.testing.expect(metrics.phase_allocations[beam_idx] > 0);
+    
+    // Test memory cleanup by resetting arena
+    edu_arena.resetForNextCycle();
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+BeamGrouper - educational arena integration

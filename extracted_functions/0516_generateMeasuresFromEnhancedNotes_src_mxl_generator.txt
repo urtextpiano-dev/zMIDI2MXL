@@ -1,0 +1,204 @@
+# Function Analysis: generateMeasuresFromEnhancedNotes
+
+## Metadata
+- **File**: `src/mxl/generator.zig`
+- **Lines**: 966-1133 (168 lines)
+- **Type**: function
+- **Visibility**: private
+- **Signature**: `fn generateMeasuresFromEnhancedNotes(`
+
+## Function Content
+```zig
+    fn generateMeasuresFromEnhancedNotes(
+        self: *const Generator,
+        xml_writer: *XmlWriter,
+        enhanced_notes: []const enhanced_note.EnhancedTimedNote,
+        tempo_bpm: u32,
+        global_chords: ?[]const chord_detector.ChordGroup,
+        key_fifths: i8,
+    ) !void {
+        // Initialize measure state for 4/4 time (will be enhanced later)
+        var measure_state = MeasureState.init(4, 4, self.divisions);
+        
+        // TASK 4.1: Use pre-detected global chords or fall back to per-part detection for backward compatibility
+        // Implements TASK 4.1 per CHORD_DETECTION_FIX_TASK_LIST.md lines 119-120
+        const chord_groups = if (global_chords) |chords| blk: {
+            // Use pre-detected global chords (cross-track chord detection)
+            break :blk chords;
+        } else blk: {
+            // Backward compatibility: Fall back to per-part chord detection
+            // Convert enhanced notes to timed notes for chord detection
+            const timed_notes = try self.convertEnhancedToTimedNotes(enhanced_notes);
+            defer self.allocator.free(timed_notes);
+            
+            // Create chord detector and detect chords with 10 tick tolerance
+            var detector = chord_detector.ChordDetector.init(self.allocator);
+            const detected_chords = try detector.detectChords(timed_notes, 10);
+            break :blk detected_chords;
+        };
+        
+        // Only clean up chord groups if we created them locally (backward compatibility path)
+        // Global chords are owned by the pipeline and will be cleaned up there
+        defer if (global_chords == null) {
+            // Cast to mutable for cleanup since we own these chords
+            const mutable_chords = @constCast(chord_groups);
+            for (mutable_chords) |*group| {
+                group.deinit(self.allocator);
+            }
+            self.allocator.free(mutable_chords);
+        };
+        
+        var chord_index: usize = 0;
+
+        // CRITICAL SAFETY: Add loop iteration limits to prevent infinite loops
+        var measure_iterations: u32 = 0;
+        const max_measures: u32 = 10000; // Reasonable limit for any real music file
+        
+        while (chord_index < chord_groups.len) {
+            // CRITICAL SAFETY: Prevent infinite loops in measure generation
+            measure_iterations += 1;
+            if (measure_iterations > max_measures) {
+                std.debug.print("SAFETY: Too many measures generated ({d}), breaking to prevent hang\n", .{max_measures});
+                break;
+            }
+            
+            // Track starting position for progress check
+            const start_chord_index = chord_index;
+            
+            // BUG #2 FIX: Collect notes for this measure and check for multiple voices
+            var measure_notes = std.ArrayList(enhanced_note.EnhancedTimedNote).init(self.allocator);
+            defer measure_notes.deinit();
+            
+            // Create a temporary measure state to track what fits in this measure
+            var temp_measure_state = MeasureState.init(4, 4, self.divisions);
+            temp_measure_state.measure_number = measure_state.measure_number;
+            
+            // Collect all notes that fit in this measure
+            const next_chord_index = try self.collectMeasureNotes(
+                chord_groups,
+                chord_index,
+                &temp_measure_state,
+                &measure_notes,
+            );
+            
+            // Check if we have multiple voices in this measure's notes
+            const measure_has_multiple_voices = blk: {
+                var voices_seen = std.bit_set.IntegerBitSet(8).initEmpty();
+                for (measure_notes.items) |note| {
+                    const voice = if (note.base_note.voice > 0) note.base_note.voice else 1;
+                    voices_seen.set(voice);
+                    if (voices_seen.count() > 1) {
+                        break :blk true;
+                    }
+                }
+                break :blk false;
+            };
+            
+            // BUG #2 FIX: Use voice-aware generation when multiple voices are detected
+            if (measure_has_multiple_voices) {
+                // Use the voice-aware generation with backup elements
+                try self.generateMeasureWithVoices(
+                    xml_writer,
+                    measure_notes.items,
+                    measure_state.measure_number,
+                    measure_state.measure_number == 1,
+                    key_fifths,
+                    tempo_bpm,
+                );
+            } else {
+                // Use the original chord-based generation for single-voice measures
+                // Start new measure
+                try self.note_attr_generator.writeMeasureStart(xml_writer, measure_state.measure_number);
+
+                // Write attributes for first measure
+                if (measure_state.measure_number == 1) {
+                    try self.note_attr_generator.writeCompleteAttributes(xml_writer, measure_state.measure_number, true, true, key_fifths);
+
+                    // Add tempo marking
+                    try self.generateTempoMarking(xml_writer, tempo_bpm);
+                }
+
+                // Fill measure with chord groups
+                var note_iterations: u32 = 0;
+                const max_notes_per_measure: u32 = 1000; // Reasonable limit
+                
+                while (chord_index < chord_groups.len and !measure_state.isMeasureFull()) {
+                    // CRITICAL SAFETY: Prevent infinite loops within measure
+                    note_iterations += 1;
+                    if (note_iterations > max_notes_per_measure) {
+                        std.debug.print("SAFETY: Too many notes processed in measure, breaking\n", .{});
+                        break;
+                    }
+                    const chord_group = chord_groups[chord_index];
+                    // Use first note's duration for measure tracking (all notes in chord have same duration)
+                    const chord_duration = if (chord_group.notes.len > 0) chord_group.notes[0].duration else 0;
+
+                    if (measure_state.canAddNote(chord_duration)) {
+                        // Generate the chord group
+                        try self.generateChordGroup(xml_writer, chord_group, true);
+                        measure_state.addNote(chord_duration);
+                        chord_index += 1;
+                    } else {
+                        // Need to start new measure
+                        break;
+                    }
+                }
+
+                // Fill remaining space with rest if measure is not full
+                if (!measure_state.isMeasureFull()) {
+                    const remaining_duration = measure_state.getRemainingDuration();
+                    
+                    // CRITICAL: Only generate rest for meaningful remainders per EXECUTIVE AUTHORITY fix
+                    // Tiny remainders absorbed as timing tolerance, not amplified to full musical rests
+                    const min_rest_threshold = self.divisions / 8; // Minimum 32nd note
+                    if (remaining_duration >= min_rest_threshold) {
+                        try self.generateRestElement(xml_writer, remaining_duration);
+                        measure_state.addNote(remaining_duration);
+                    }
+                    // Tiny remainders absorbed as timing tolerance
+                }
+
+                // Add barline
+                try self.note_attr_generator.writeBarline(xml_writer);
+
+                try xml_writer.endElement(); // measure
+            }
+            
+            // Update chord_index to the next position
+            chord_index = next_chord_index;
+
+            // Prepare for next measure
+            measure_state.startNewMeasure();
+            
+            // Check if we made progress in this iteration
+            if (chord_index == start_chord_index and chord_index < chord_groups.len) {
+                // No progress made - force advance to prevent infinite loop
+                chord_index += 1;
+            }
+        }
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

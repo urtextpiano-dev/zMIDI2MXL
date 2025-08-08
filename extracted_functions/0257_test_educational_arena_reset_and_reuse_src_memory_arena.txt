@@ -1,0 +1,61 @@
+# Function Analysis: test_educational_arena_reset_and_reuse
+
+## Metadata
+- **File**: `src/memory/arena.zig`
+- **Lines**: 747-768 (22 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "educational arena reset and reuse" {`
+
+## Function Content
+```zig
+test "educational arena reset and reuse" {
+    var edu_arena = EducationalArena.init(std.testing.allocator, false, false);
+    defer edu_arena.deinit();
+    
+    // First cycle
+    edu_arena.beginPhase(.tuplet_detection);
+    _ = try edu_arena.allocForEducational(u8, 500);
+    try edu_arena.processEducationalBatch(50);
+    
+    const metrics_before = edu_arena.getMetrics();
+    try std.testing.expect(metrics_before.notes_processed == 50);
+    
+    // Reset and second cycle
+    edu_arena.resetForNextCycle();
+    edu_arena.beginPhase(.rest_optimization);
+    _ = try edu_arena.allocForEducational(u16, 200);
+    try edu_arena.processEducationalBatch(75);
+    
+    const metrics_after = edu_arena.getMetrics();
+    try std.testing.expect(metrics_after.notes_processed == 125); // Cumulative
+    try std.testing.expect(metrics_after.successful_cycles == 2);
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+educational arena reset and reuse

@@ -1,0 +1,72 @@
+# Function Analysis: generateRestElement
+
+## Metadata
+- **File**: `src/mxl/generator.zig`
+- **Lines**: 829-864 (36 lines)
+- **Type**: function
+- **Visibility**: private
+- **Signature**: `fn generateRestElement(`
+
+## Function Content
+```zig
+    fn generateRestElement(
+        self: *const Generator,
+        xml_writer: *XmlWriter,
+        duration: u32,
+    ) !void {
+        // Duration using professional quantization
+        // Implements EXECUTIVE MANDATE per critical timing accuracy issue
+        // TIMING-2.3 FIX: Convert MIDI ticks to MusicXML divisions if converter available
+        const duration_in_divisions = if (self.division_converter) |converter| blk: {
+            const converted = try converter.convertTicksToDivisions(duration);
+            break :blk converted;
+        } else duration; // Assume already in divisions if no converter
+        
+        // CRITICAL: Don't generate XML for tiny durations (filtered as noise)
+        // Durations less than 5% of quarter note are measurement noise
+        const min_duration = self.divisions / 20;
+        if (duration_in_divisions < min_duration) {
+            return; // Tiny durations absorbed as timing tolerance
+        }
+        
+        try xml_writer.startElement("note", null);
+
+        // Rest element
+        try xml_writer.startElement("rest", null);
+        try xml_writer.endElement(); // rest
+
+        var duration_buf: [32]u8 = undefined;
+        const duration_str = try std.fmt.bufPrint(&duration_buf, "{d}", .{duration_in_divisions});
+        try xml_writer.writeElement("duration", duration_str, null);
+
+        // Determine note type based on duration
+        const note_type = try self.determineNoteType(duration_in_divisions);
+        try xml_writer.writeElement("type", note_type, null);
+
+        try xml_writer.endElement(); // note
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

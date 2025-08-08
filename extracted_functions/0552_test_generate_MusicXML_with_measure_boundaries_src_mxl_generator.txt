@@ -1,0 +1,88 @@
+# Function Analysis: test_generate_MusicXML_with_measure_boundaries
+
+## Metadata
+- **File**: `src/mxl/generator.zig`
+- **Lines**: 2374-2422 (49 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "generate MusicXML with measure boundaries" {`
+
+## Function Content
+```zig
+test "generate MusicXML with measure boundaries" {
+    var buffer = std.ArrayList(u8).init(std.testing.allocator);
+    defer buffer.deinit();
+
+    const generator = Generator.init(std.testing.allocator, 480);
+
+    // Create test MIDI events that span multiple measures
+    const events = [_]NoteEvent{
+        .{ .event_type = @import("../midi/parser.zig").MidiEventType.note_on, .channel = 0, .note = 60, .velocity = 64, .tick = 0 }, // C4
+        .{ .event_type = @import("../midi/parser.zig").MidiEventType.note_on, .channel = 0, .note = 62, .velocity = 64, .tick = 480 }, // D4
+        .{ .event_type = @import("../midi/parser.zig").MidiEventType.note_on, .channel = 0, .note = 64, .velocity = 64, .tick = 960 }, // E4
+        .{ .event_type = @import("../midi/parser.zig").MidiEventType.note_on, .channel = 0, .note = 65, .velocity = 64, .tick = 1440 }, // F4
+        .{ .event_type = @import("../midi/parser.zig").MidiEventType.note_on, .channel = 0, .note = 67, .velocity = 64, .tick = 1920 }, // G4 (start of measure 2)
+        .{ .event_type = @import("../midi/parser.zig").MidiEventType.note_on, .channel = 0, .note = 69, .velocity = 64, .tick = 2400 }, // A4
+        .{ .event_type = @import("../midi/parser.zig").MidiEventType.note_on, .channel = 0, .note = 71, .velocity = 64, .tick = 2880 }, // B4
+    };
+
+    try generator.generateMusicXMLWithMeasureBoundaries(buffer.writer(), &events, 120); // Default tempo for test
+
+    const output = buffer.items;
+
+    // Check for proper structure
+    try std.testing.expect(std.mem.indexOf(u8, output, "<?xml version=\"1.0\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "<score-partwise version=\"4.0\">") != null);
+
+    // Check for multiple measures
+    var measure_count: usize = 0;
+    var pos: usize = 0;
+    while (std.mem.indexOf(u8, output[pos..], "<measure number=")) |idx| {
+        measure_count += 1;
+        pos += idx + 1;
+    }
+    try std.testing.expect(measure_count >= 2); // Should have at least 2 measures
+
+    // Check for attributes in each measure
+    try std.testing.expect(std.mem.indexOf(u8, output, "<attributes>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "<divisions>480</divisions>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "<key>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "<fifths>0</fifths>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "<staves>1</staves>") != null);
+
+    // Check for barlines
+    try std.testing.expect(std.mem.indexOf(u8, output, "<barline location=\"right\">") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "<bar-style>regular</bar-style>") != null);
+
+    // Check for time signature only in first measure
+    const time_occurrences = std.mem.count(u8, output, "<time>");
+    try std.testing.expectEqual(@as(usize, 1), time_occurrences);
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+generate MusicXML with measure boundaries

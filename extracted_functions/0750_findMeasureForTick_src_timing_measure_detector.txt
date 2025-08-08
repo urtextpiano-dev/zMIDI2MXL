@@ -1,0 +1,44 @@
+# Function Analysis: findMeasureForTick
+
+## Metadata
+- **File**: `src/timing/measure_detector.zig`
+- **Lines**: 306-313 (8 lines)
+- **Type**: function
+- **Visibility**: public
+- **Signature**: `pub fn findMeasureForTick(measures: []const Measure, tick: u32) ?*const Measure {`
+
+## Function Content
+```zig
+    pub fn findMeasureForTick(measures: []const Measure, tick: u32) ?*const Measure {
+        for (measures) |*measure| {
+            if (tick >= measure.start_tick and tick < measure.end_tick) {
+                return measure;
+            }
+        }
+        return null;
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

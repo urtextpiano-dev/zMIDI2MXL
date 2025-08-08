@@ -1,0 +1,99 @@
+# Function Analysis: groupNotesIntoMeasures
+
+## Metadata
+- **File**: `src/educational_processor.zig`
+- **Lines**: 1491-1553 (63 lines)
+- **Type**: function
+- **Visibility**: private
+- **Signature**: `fn groupNotesIntoMeasures(self: *EducationalProcessor, enhanced_notes: []enhanced_note.EnhancedTimedNote) ![]MeasureInfo {`
+
+## Function Content
+```zig
+    fn groupNotesIntoMeasures(self: *EducationalProcessor, enhanced_notes: []enhanced_note.EnhancedTimedNote) ![]MeasureInfo {
+        if (enhanced_notes.len == 0) return &[_]MeasureInfo{};
+        
+        var measures = std.ArrayList(MeasureInfo).init(self.arena.allocator());
+        defer measures.deinit();
+        
+        // Simple heuristic: group by 4/4 measures of 1920 ticks each
+        // In real implementation, this would use actual measure boundaries
+        const default_time_sig = midi_parser.TimeSignatureEvent{
+            .tick = 0,
+            .numerator = 4,
+            .denominator_power = 2, // 4/4 time
+            .clocks_per_metronome = 24,
+            .thirtysecond_notes_per_quarter = 8,
+        };
+        
+        const ticks_per_measure = 1920; // 4 quarters * 480 ticks
+        var current_measure_start: u32 = 0;
+        var measure_start_idx: usize = 0;
+        
+        for (enhanced_notes, 0..) |note, i| {
+            const note_tick = note.base_note.start_tick;
+            const measure_num = note_tick / ticks_per_measure;
+            const expected_start = measure_num * ticks_per_measure;
+            
+            // Check if we've moved to a new measure
+            if (expected_start > current_measure_start and i > measure_start_idx) {
+                // Create measure for previous notes
+                try measures.append(.{
+                    .notes = enhanced_notes[measure_start_idx..i],
+                    .start_tick = current_measure_start,
+                    .end_tick = current_measure_start + ticks_per_measure,
+                    .time_signature = default_time_sig,
+                });
+                
+                measure_start_idx = i;
+                current_measure_start = expected_start;
+            }
+        }
+        
+        // Add final measure
+        if (measure_start_idx < enhanced_notes.len) {
+            // Calculate the actual end tick based on the last note
+            var max_end_tick = current_measure_start + ticks_per_measure;
+            for (enhanced_notes[measure_start_idx..]) |note| {
+                const note_end = note.base_note.start_tick + note.base_note.duration;
+                if (note_end > max_end_tick) {
+                    // Extend to next measure boundary if note extends beyond
+                    const extended_measures = (note_end + ticks_per_measure - 1) / ticks_per_measure;
+                    max_end_tick = extended_measures * ticks_per_measure;
+                }
+            }
+            
+            try measures.append(.{
+                .notes = enhanced_notes[measure_start_idx..],
+                .start_tick = current_measure_start,
+                .end_tick = max_end_tick,
+                .time_signature = default_time_sig,
+            });
+        }
+        
+        return try measures.toOwnedSlice();
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

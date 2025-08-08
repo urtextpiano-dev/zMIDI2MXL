@@ -1,0 +1,70 @@
+# Function Analysis: getMaxRestDurationAtPosition
+
+## Metadata
+- **File**: `src/timing/rest_optimizer.zig`
+- **Lines**: 294-327 (34 lines)
+- **Type**: function
+- **Visibility**: private
+- **Signature**: `fn getMaxRestDurationAtPosition(self: *RestOptimizer, position: u32, available_duration: u32, beam_constraints: ?[]const BeamGroupConstraint, time_sig: TimeSignature) u32 {`
+
+## Function Content
+```zig
+    fn getMaxRestDurationAtPosition(self: *RestOptimizer, position: u32, available_duration: u32, beam_constraints: ?[]const BeamGroupConstraint, time_sig: TimeSignature) u32 {
+        
+        if (beam_constraints == null) return available_duration;
+        
+        var max_duration = available_duration;
+        
+        // Check if position is within any beam group
+        for (beam_constraints.?) |constraint| {
+            // If we're inside a beam group, limit rest duration to not extend beyond group
+            if (position >= constraint.start_time and position < constraint.end_time) {
+                const remaining_in_group = constraint.end_time - position;
+                max_duration = @min(max_duration, remaining_in_group);
+            }
+            // If beam group starts within our available duration, limit to beam start
+            else if (constraint.start_time > position and constraint.start_time < position + available_duration) {
+                const duration_to_beam = constraint.start_time - position;
+                max_duration = @min(max_duration, duration_to_beam);
+            }
+        }
+        
+        // Also respect beat boundaries more strictly near beam groups
+        const position_in_measure = position % time_sig.measure_duration;
+        const position_in_beat = position_in_measure % time_sig.beat_duration;
+        
+        // If near beam boundaries, prefer to align with beat subdivisions
+        if (self.isNearBeamGroup(position, beam_constraints)) {
+            const next_eighth_boundary = time_sig.beat_duration / 2 - (position_in_beat % (time_sig.beat_duration / 2));
+            if (next_eighth_boundary < max_duration) {
+                max_duration = @min(max_duration, next_eighth_boundary);
+            }
+        }
+        
+        return max_duration;
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

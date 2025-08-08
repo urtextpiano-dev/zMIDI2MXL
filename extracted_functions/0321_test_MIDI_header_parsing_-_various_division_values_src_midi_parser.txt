@@ -1,0 +1,63 @@
+# Function Analysis: test_MIDI_header_parsing_-_various_division_values
+
+## Metadata
+- **File**: `src/midi/parser.zig`
+- **Lines**: 868-891 (24 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "MIDI header parsing - various division values" {`
+
+## Function Content
+```zig
+test "MIDI header parsing - various division values" {
+    // Test different ticks per quarter note values
+    const test_cases = [_]struct { division_bytes: [2]u8, expected_ticks: u15 }{
+        .{ .division_bytes = [_]u8{ 0x00, 0x60 }, .expected_ticks = 96 },   // 96 PPQ (common)
+        .{ .division_bytes = [_]u8{ 0x01, 0xE0 }, .expected_ticks = 480 },  // 480 PPQ (high res)
+        .{ .division_bytes = [_]u8{ 0x00, 0x30 }, .expected_ticks = 48 },   // 48 PPQ (low res)
+        .{ .division_bytes = [_]u8{ 0x00, 0x18 }, .expected_ticks = 24 },   // 24 PPQ (minimal)
+        .{ .division_bytes = [_]u8{ 0x7F, 0xFF }, .expected_ticks = 32767 }, // Maximum value
+    };
+    
+    for (test_cases) |case| {
+        const data = [_]u8{ 
+            0x4D, 0x54, 0x68, 0x64,  // "MThd" magic
+            0x00, 0x00, 0x00, 0x06,  // Length = 6
+            0x00, 0x01,              // Format 1
+            0x00, 0x01,              // 1 track
+            case.division_bytes[0], case.division_bytes[1]
+        };
+        
+        const header = try parseMidiHeader(&data);
+        try std.testing.expect(header.division.isTicksPerQuarter());
+        try std.testing.expectEqual(case.expected_ticks, header.division.getTicksPerQuarter().?);
+    }
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+MIDI header parsing - various division values

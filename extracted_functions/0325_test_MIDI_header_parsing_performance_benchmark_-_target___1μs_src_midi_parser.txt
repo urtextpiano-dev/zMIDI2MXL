@@ -1,0 +1,69 @@
+# Function Analysis: test_MIDI_header_parsing_performance_benchmark_-_target_<_1μs
+
+## Metadata
+- **File**: `src/midi/parser.zig`
+- **Lines**: 1011-1040 (30 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "MIDI header parsing performance benchmark - target < 1μs" {`
+
+## Function Content
+```zig
+test "MIDI header parsing performance benchmark - target < 1μs" {
+    // Performance benchmark per TASK-005 target < 1μs per header
+    const test_data = [_]u8{ 
+        0x4D, 0x54, 0x68, 0x64,  // "MThd" magic
+        0x00, 0x00, 0x00, 0x06,  // Length = 6
+        0x00, 0x01,              // Format 1
+        0x00, 0x03,              // 3 tracks
+        0x00, 0x60               // 96 ticks per quarter note
+    };
+    
+    const iterations = 100000; // 100k iterations for stable timing
+    
+    const start_time = std.time.nanoTimestamp();
+    
+    for (0..iterations) |_| {
+        const header = parseMidiHeader(&test_data) catch unreachable;
+        _ = header; // Prevent optimization
+    }
+    
+    const end_time = std.time.nanoTimestamp();
+    const total_ns = @as(u64, @intCast(end_time - start_time));
+    const ns_per_parse = total_ns / iterations;
+    
+    // Verify we meet the performance target of < 1μs (1000ns) per header
+    std.debug.print("MIDI header parse performance: {d} ns per header\n", .{ns_per_parse});
+    
+    // Target is < 1μs = 1000ns per header parse
+    // This should easily be achievable since we're just reading and validating 14 bytes
+    try std.testing.expect(ns_per_parse < 1000); // < 1μs target
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+MIDI header parsing performance benchmark - target < 1μs

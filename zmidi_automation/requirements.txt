@@ -1,0 +1,14 @@
+# Core Dependencies (Required)
+
+# Optional Dependencies (Recommended for full functionality)
+watchdog>=3.0.0          # File watching for sync file monitoring
+pyautogui>=0.9.54        # UI automation for typing and clicking
+pyperclip>=1.8.2         # Clipboard operations
+Pillow>=10.0.0           # Image processing for screenshots
+pytesseract>=0.3.10      # OCR for prompt detection
+
+# Windows-specific (only on Windows)
+# pywin32>=306           # Windows automation - uncomment on Windows
+
+# Note: Install all optional dependencies for full automation features:
+# pip install -r requirements.txt

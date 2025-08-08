@@ -1,0 +1,109 @@
+# Function Analysis: writeCentralDirectoryHeader
+
+## Metadata
+- **File**: `src/mxl/zip_writer.zig`
+- **Lines**: 277-349 (73 lines)
+- **Type**: function
+- **Visibility**: private
+- **Signature**: `fn writeCentralDirectoryHeader(self: *ZipWriter, entry: ZipEntry) !void {`
+
+## Function Content
+```zig
+    fn writeCentralDirectoryHeader(self: *ZipWriter, entry: ZipEntry) !void {
+        // Signature
+        try self.writer.writeInt(u32, ZIP_CENTRAL_DIR_HEADER_SIGNATURE, .little);
+        self.current_offset += 4;
+
+        // Version made by (2.0)
+        try self.writer.writeInt(u16, ZIP_VERSION_NEEDED, .little);
+        self.current_offset += 2;
+
+        // Version needed to extract
+        try self.writer.writeInt(u16, ZIP_VERSION_NEEDED, .little);
+        self.current_offset += 2;
+
+        // General purpose bit flag
+        try self.writer.writeInt(u16, FLAG_UTF8_ENCODING, .little);
+        self.current_offset += 2;
+
+        // Compression method
+        try self.writer.writeInt(u16, entry.compression_method, .little);
+        self.current_offset += 2;
+
+        // Last mod file time
+        try self.writer.writeInt(u16, entry.mod_time, .little);
+        self.current_offset += 2;
+
+        // Last mod file date  
+        try self.writer.writeInt(u16, entry.mod_date, .little);
+        self.current_offset += 2;
+
+        // CRC-32
+        try self.writer.writeInt(u32, entry.crc32, .little);
+        self.current_offset += 4;
+
+        // Compressed size
+        try self.writer.writeInt(u32, entry.compressed_size, .little);
+        self.current_offset += 4;
+
+        // Uncompressed size
+        try self.writer.writeInt(u32, entry.uncompressed_size, .little);
+        self.current_offset += 4;
+
+        // File name length
+        try self.writer.writeInt(u16, @intCast(entry.filename.len), .little);
+        self.current_offset += 2;
+
+        // Extra field length
+        try self.writer.writeInt(u16, 0, .little);
+        self.current_offset += 2;
+
+        // File comment length
+        try self.writer.writeInt(u16, 0, .little);
+        self.current_offset += 2;
+
+        // Disk number start
+        try self.writer.writeInt(u16, 0, .little);
+        self.current_offset += 2;
+
+        // Internal file attributes
+        try self.writer.writeInt(u16, 0, .little);
+        self.current_offset += 2;
+
+        // External file attributes
+        try self.writer.writeInt(u32, 0, .little);
+        self.current_offset += 4;
+
+        // Relative offset of local header
+        try self.writer.writeInt(u32, entry.offset, .little);
+        self.current_offset += 4;
+
+        // File name
+        try self.writer.writeAll(entry.filename);
+        self.current_offset += @intCast(entry.filename.len);
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

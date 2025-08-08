@@ -1,0 +1,78 @@
+# Function Analysis: test_Control_change_event_parsing_-_all_controllers_tracked_(TASK-016)
+
+## Metadata
+- **File**: `src/midi/parser.zig`
+- **Lines**: 4294-4332 (39 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "Control change event parsing - all controllers tracked (TASK-016)" {`
+
+## Function Content
+```zig
+test "Control change event parsing - all controllers tracked (TASK-016)" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    
+    // Track with various control changes - TASK-016: all should be tracked
+    const track_data = [_]u8{
+        0x00,                    // Delta time: 0
+        0xB0, 0x01, 0x40,       // Modulation Wheel (CC 1) - track
+        0x00,                    // Delta time: 0
+        0xB0, 0x07, 0x7F,       // Volume (CC 7) - track
+        0x00,                    // Delta time: 0
+        0xB0, 0x0A, 0x40,       // Pan (CC 10) - track
+        0x00,                    // Delta time: 0
+        0xB0, 0x0B, 0x60,       // Expression (CC 11) - track
+        0x00,                    // Delta time: 0
+        0xB0, 0x40, 0x7F,       // Sustain Pedal (CC 64) - track
+        0x00,                    // Delta time: 0
+        0xB0, 0x5B, 0x20,       // Reverb (CC 91) - track
+        0x00,                    // Delta time: 0
+        0xFF, 0x2F, 0x00,       // End of Track
+    };
+    
+    var result = try parseTrackEvents(allocator, &track_data);
+    defer result.deinit(allocator);
+    
+    // TASK-016: Should track all control changes (6 controllers)
+    try std.testing.expectEqual(@as(usize, 6), result.control_change_events.items.len);
+    try std.testing.expectEqual(@as(u32, 6), result.events_parsed);  // All 6 CCs tracked
+    try std.testing.expectEqual(@as(u32, 1), result.events_skipped); // Only End of Track
+    
+    // Verify we got all controllers in order
+    try std.testing.expectEqual(@as(u7, 1), result.control_change_events.items[0].controller);   // Modulation
+    try std.testing.expectEqual(@as(u7, 7), result.control_change_events.items[1].controller);   // Volume
+    try std.testing.expectEqual(@as(u7, 10), result.control_change_events.items[2].controller);  // Pan
+    try std.testing.expectEqual(@as(u7, 11), result.control_change_events.items[3].controller);  // Expression
+    try std.testing.expectEqual(@as(u7, 64), result.control_change_events.items[4].controller);  // Sustain
+    try std.testing.expectEqual(@as(u7, 91), result.control_change_events.items[5].controller);  // Reverb
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+Control change event parsing - all controllers tracked (TASK-016)

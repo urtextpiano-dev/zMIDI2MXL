@@ -1,0 +1,76 @@
+# Function Analysis: test_Tempo_event_-_BPM_conversions
+
+## Metadata
+- **File**: `src/midi/parser.zig`
+- **Lines**: 3212-3248 (37 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "Tempo event - BPM conversions" {`
+
+## Function Content
+```zig
+test "Tempo event - BPM conversions" {
+    // Test toBPM conversion
+    {
+        const tempo = TempoEvent{
+            .tick = 0,
+            .microseconds_per_quarter = 500_000, // 120 BPM
+        };
+        try std.testing.expectApproxEqAbs(@as(f64, 120.0), tempo.toBPM(), 0.001);
+    }
+    
+    // Test various common tempos
+    {
+        const tempo60 = TempoEvent{ .tick = 0, .microseconds_per_quarter = 1_000_000 };
+        try std.testing.expectApproxEqAbs(@as(f64, 60.0), tempo60.toBPM(), 0.001);
+        
+        const tempo140 = TempoEvent{ .tick = 0, .microseconds_per_quarter = 428_571 };
+        try std.testing.expectApproxEqAbs(@as(f64, 140.0), tempo140.toBPM(), 0.1);
+        
+        const tempo180 = TempoEvent{ .tick = 0, .microseconds_per_quarter = 333_333 };
+        try std.testing.expectApproxEqAbs(@as(f64, 180.0), tempo180.toBPM(), 0.1);
+    }
+    
+    // Test fromBPM creation
+    {
+        const tempo = TempoEvent.fromBPM(96, 120.0);
+        try std.testing.expectEqual(@as(u32, 96), tempo.tick);
+        try std.testing.expectEqual(@as(u32, 500_000), tempo.microseconds_per_quarter);
+    }
+    
+    // Test round-trip conversion
+    {
+        const original_bpm = 144.0;
+        const tempo = TempoEvent.fromBPM(0, original_bpm);
+        const converted_bpm = tempo.toBPM();
+        try std.testing.expectApproxEqAbs(original_bpm, converted_bpm, 0.1);
+    }
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+Tempo event - BPM conversions

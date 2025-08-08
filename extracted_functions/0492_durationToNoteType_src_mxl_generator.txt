@@ -1,0 +1,65 @@
+# Function Analysis: durationToNoteType
+
+## Metadata
+- **File**: `src/mxl/generator.zig`
+- **Lines**: 81-109 (29 lines)
+- **Type**: function
+- **Visibility**: public
+- **Signature**: `pub fn durationToNoteType(duration: u32, divisions_per_quarter: u32) NoteType {`
+
+## Function Content
+```zig
+pub fn durationToNoteType(duration: u32, divisions_per_quarter: u32) NoteType {
+    // Calculate duration as fraction of whole note
+    // Whole note = 4 quarter notes = 4 * divisions_per_quarter
+    const whole_note_duration = divisions_per_quarter * 4;
+
+    // Find the closest standard note type
+    // Using simple ratios for now, dots and tuplets will be handled in later tasks
+    if (duration >= whole_note_duration * 2) {
+        return .breve;
+    } else if (duration >= whole_note_duration) {
+        return .whole;
+    } else if (duration >= whole_note_duration / 2) {
+        return .half;
+    } else if (duration >= whole_note_duration / 4) {
+        return .quarter;
+    } else if (duration >= whole_note_duration / 8) {
+        return .eighth;
+    } else if (duration >= whole_note_duration / 16) {
+        return .@"16th";
+    } else if (duration >= whole_note_duration / 32) {
+        return .@"32nd";
+    } else if (duration >= whole_note_duration / 64) {
+        return .@"64th";
+    } else if (duration >= whole_note_duration / 128) {
+        return .@"128th";
+    } else {
+        return .@"256th";
+    }
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

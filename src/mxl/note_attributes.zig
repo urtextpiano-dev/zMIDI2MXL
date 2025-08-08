@@ -1,0 +1,480 @@
+const std = @import("std");
+const XmlWriter = @import("xml_writer.zig").XmlWriter;
+const Attribute = @import("xml_writer.zig").Attribute;
+const duration_quantizer = @import("duration_quantizer.zig");
+
+// Implements TASK-027 per IMPLEMENTATION_TASK_LIST.md lines 336-345
+// Complete Note Attributes - Add measure numbers, time signatures, and tempo markings
+// Reference: MXL_Architecture_Reference.md Section 4.2
+// Performance target: < 2μs per note
+
+/// Tempo marking structure for MusicXML
+pub const TempoMarking = struct {
+    bpm: f64,
+    beat_unit: []const u8,  // "quarter", "half", etc.
+    
+    /// Create tempo marking from BPM value
+    pub fn fromBPM(bpm: f64) TempoMarking {
+        return .{
+            .bpm = bpm,
+            .beat_unit = "quarter",  // Default to quarter note
+        };
+    }
+};
+
+/// Determine appropriate staff for a note based on pitch
+/// Staff 1 (treble): C4 (MIDI 60) and above
+/// Staff 2 (bass): Below C4
+/// Implements piano grand staff structure per musicxml-semantic-validator requirements
+pub fn getStaffForNote(midi_note: u8) u8 {
+    if (midi_note >= 60) {  // C4 and above
+        return 1;  // Treble staff
+    } else {
+        return 2;  // Bass staff
+    }
+}
+
+/// Map voice numbers to piano convention based on staff
+/// Implements MVS-2.1 voice preservation architecture
+/// 
+/// Input: voice (1-4), staff (1-2)
+/// Output: mapped voice number following MuseScore convention:
+///   - Treble staff (1): voices 1, 2
+///   - Bass staff (2): voices 5, 6
+pub fn mapVoiceForPiano(voice: u8, staff: u8) u8 {
+    if (voice == 0) return 1; // Default unassigned voices to 1
+    
+    if (staff == 2) { // Bass staff
+        // Map voices 1-4 to 5-8 for bass staff
+        return switch (voice) {
+            1 => 5,
+            2 => 6,
+            3 => 7,
+            4 => 8,
+            else => 5, // Default to voice 5 for bass
+        };
+    } else { // Treble staff (or default)
+        // Keep voices 1-4 as-is for treble staff
+        return if (voice <= 4) voice else 1;
+    }
+}
+
+/// Complete note attributes generator
+/// Implements TASK-027 per MXL_Architecture_Reference.md Section 4.2
+/// Enhanced with professional duration quantization per EXECUTIVE MANDATE
+pub const NoteAttributeGenerator = struct {
+    allocator: std.mem.Allocator,
+    divisions: u32, // Raw MIDI divisions
+    quantizer: duration_quantizer.DurationQuantizer, // Professional quantization
+    
+    pub fn init(allocator: std.mem.Allocator, divisions: u32) NoteAttributeGenerator {
+        return .{
+            .allocator = allocator,
+            .divisions = divisions,
+            .quantizer = duration_quantizer.DurationQuantizer.init(divisions),
+        };
+    }
+    
+    /// Write complete attributes for a measure
+    /// Implements TASK-027 - includes divisions, time signature, clef
+    pub fn writeMeasureAttributes(
+        self: *const NoteAttributeGenerator,
+        xml_writer: *XmlWriter,
+        time_sig_numerator: u8,
+        time_sig_denominator: u8,
+        include_clef: bool,
+    ) !void {
+        try xml_writer.startElement("attributes", null);
+        
+        // Write divisions (required) using normalized professional divisions
+        // Implements EXECUTIVE MANDATE per critical timing accuracy issue
+        var divisions_buf: [32]u8 = undefined;
+        const divisions_str = try std.fmt.bufPrint(&divisions_buf, "{d}", .{self.quantizer.getNormalizedDivisions()});
+        try xml_writer.writeElement("divisions", divisions_str, null);
+        
+        // Write time signature
+        try xml_writer.startElement("time", null);
+        
+        var num_buf: [8]u8 = undefined;
+        const num_str = try std.fmt.bufPrint(&num_buf, "{d}", .{time_sig_numerator});
+        try xml_writer.writeElement("beats", num_str, null);
+        
+        var denom_buf: [8]u8 = undefined;
+        const denom_str = try std.fmt.bufPrint(&denom_buf, "{d}", .{time_sig_denominator});
+        try xml_writer.writeElement("beat-type", denom_str, null);
+        
+        try xml_writer.endElement(); // time
+        
+        // Write clef if requested (typically for first measure)
+        if (include_clef) {
+            try xml_writer.startElement("clef", null);
+            try xml_writer.writeElement("sign", "G", null);
+            try xml_writer.writeElement("line", "2", null);
+            try xml_writer.endElement(); // clef
+        }
+        
+        try xml_writer.endElement(); // attributes
+    }
+    
+    /// Write tempo marking as a direction element
+    /// Implements TASK-027 - tempo markings per MXL specification
+    pub fn writeTempoDirection(
+        self: *const NoteAttributeGenerator,
+        xml_writer: *XmlWriter,
+        tempo_marking: *const TempoMarking,
+        placement: ?[]const u8,  // "above" or "below"
+    ) !void {
+        _ = self;
+        
+        // Start direction element with optional placement
+        if (placement) |p| {
+            try xml_writer.startElement("direction", &[_]Attribute{
+                .{ .name = "placement", .value = p },
+            });
+        } else {
+            try xml_writer.startElement("direction", null);
+        }
+        
+        // Direction-type contains the actual tempo marking
+        try xml_writer.startElement("direction-type", null);
+        
+        // Metronome marking
+        try xml_writer.startElement("metronome", null);
+        
+        // Beat unit (e.g., quarter note)
+        try xml_writer.writeElement("beat-unit", tempo_marking.beat_unit, null);
+        
+        // BPM value
+        var bpm_buf: [32]u8 = undefined;
+        const bpm_str = try std.fmt.bufPrint(&bpm_buf, "{d:.1}", .{tempo_marking.bpm});
+        try xml_writer.writeElement("per-minute", bpm_str, null);
+        
+        try xml_writer.endElement(); // metronome
+        try xml_writer.endElement(); // direction-type
+        
+        // Sound element with tempo for playback
+        try xml_writer.startElement("sound", &[_]Attribute{
+            .{ .name = "tempo", .value = bpm_str },
+        });
+        try xml_writer.endElement(); // sound
+        
+        try xml_writer.endElement(); // direction
+    }
+    
+    /// Write a measure start tag with number
+    /// Implements TASK-027 - measure numbers per MXL specification
+    pub fn writeMeasureStart(
+        self: *const NoteAttributeGenerator,
+        xml_writer: *XmlWriter,
+        measure_number: u32,
+    ) !void {
+        _ = self;
+        
+        var measure_num_buf: [16]u8 = undefined;
+        const measure_num_str = try std.fmt.bufPrint(&measure_num_buf, "{d}", .{measure_number});
+        
+        try xml_writer.startElement("measure", &[_]Attribute{
+            .{ .name = "number", .value = measure_num_str },
+        });
+    }
+    
+    /// Write note element with basic pitch and duration
+    /// Simplified version for TASK-027 testing
+    pub fn writeSimpleNote(
+        self: *const NoteAttributeGenerator,
+        xml_writer: *XmlWriter,
+        pitch_step: []const u8,
+        octave: i8,
+        duration_divisions: u32,
+    ) !void {
+        
+        try xml_writer.startElement("note", null);
+        
+        // Pitch
+        try xml_writer.startElement("pitch", null);
+        try xml_writer.writeElement("step", pitch_step, null);
+        
+        var octave_buf: [8]u8 = undefined;
+        const octave_str = try std.fmt.bufPrint(&octave_buf, "{d}", .{octave});
+        try xml_writer.writeElement("octave", octave_str, null);
+        
+        try xml_writer.endElement(); // pitch
+        
+        // Duration using professional quantization
+        // Implements EXECUTIVE MANDATE per critical timing accuracy issue
+        const quantized = self.quantizer.quantizeDuration(duration_divisions);
+        var duration_buf: [32]u8 = undefined;
+        const duration_str = try std.fmt.bufPrint(&duration_buf, "{d}", .{quantized.normalized_duration});
+        try xml_writer.writeElement("duration", duration_str, null);
+        
+        // Type using quantized note type for professional accuracy
+        try xml_writer.writeElement("type", quantized.note_type.toString(), null);
+        
+        try xml_writer.endElement(); // note
+    }
+    
+    /// Write complete attributes for a measure with all required elements
+    /// Implements barline visibility fix per CRITICAL ISSUE IDENTIFIED
+    /// Enhanced for piano grand staff support - fixes redundant clef issue
+    /// FIX-2.1: Updated to accept key signature from MIDI data
+    pub fn writeCompleteAttributes(
+        self: *const NoteAttributeGenerator,
+        xml_writer: *XmlWriter,
+        measure_number: u32,
+        is_piano: bool,
+        include_clefs: bool,
+        key_fifths: i8,
+    ) !void {
+        try xml_writer.startElement("attributes", null);
+        
+        // Write divisions (required) using normalized professional divisions
+        // Implements EXECUTIVE MANDATE per critical timing accuracy issue
+        var divisions_buf: [32]u8 = undefined;
+        const divisions_str = try std.fmt.bufPrint(&divisions_buf, "{d}", .{self.quantizer.getNormalizedDivisions()});
+        try xml_writer.writeElement("divisions", divisions_str, null);
+        
+        // Add key signature from MIDI data (FIX-2.1)
+        try xml_writer.startElement("key", null);
+        var fifths_buf: [8]u8 = undefined;
+        const fifths_str = try std.fmt.bufPrint(&fifths_buf, "{d}", .{key_fifths});
+        try xml_writer.writeElement("fifths", fifths_str, null);
+        try xml_writer.endElement(); // key
+        
+        // Only add time signature in first measure
+        if (measure_number == 1) {
+            try xml_writer.startElement("time", null);
+            try xml_writer.writeElement("beats", "4", null);
+            try xml_writer.writeElement("beat-type", "4", null);
+            try xml_writer.endElement(); // time
+        }
+        
+        // Write staves element - 2 for piano, 1 for other instruments
+        if (is_piano) {
+            try xml_writer.writeElement("staves", "2", null);
+        } else {
+            try xml_writer.writeElement("staves", "1", null);
+        }
+        
+        // Write clefs only when requested (typically first measure only)
+        if (include_clefs) {
+            if (is_piano) {
+                // Treble clef for staff 1
+                try xml_writer.startElement("clef", &[_]Attribute{
+                    .{ .name = "number", .value = "1" },
+                });
+                try xml_writer.writeElement("sign", "G", null);
+                try xml_writer.writeElement("line", "2", null);
+                try xml_writer.endElement(); // clef
+                
+                // Bass clef for staff 2
+                try xml_writer.startElement("clef", &[_]Attribute{
+                    .{ .name = "number", .value = "2" },
+                });
+                try xml_writer.writeElement("sign", "F", null);
+                try xml_writer.writeElement("line", "4", null);
+                try xml_writer.endElement(); // clef
+            } else {
+                // Single treble clef for non-piano instruments
+                try xml_writer.startElement("clef", null);
+                try xml_writer.writeElement("sign", "G", null);
+                try xml_writer.writeElement("line", "2", null);
+                try xml_writer.endElement(); // clef
+            }
+        }
+        
+        try xml_writer.endElement(); // attributes
+    }
+    
+    /// Write explicit barline for measure visibility
+    /// Implements barline visibility fix per CRITICAL ISSUE IDENTIFIED
+    pub fn writeBarline(
+        self: *const NoteAttributeGenerator,
+        xml_writer: *XmlWriter,
+    ) !void {
+        _ = self;
+        try xml_writer.startElement("barline", &[_]Attribute{
+            .{ .name = "location", .value = "right" },
+        });
+        try xml_writer.writeElement("bar-style", "regular", null);
+        try xml_writer.endElement(); // barline
+    }
+    
+    /// Write a complete measure with attributes, notes, and barlines
+    /// Implements TASK-027 enhanced with barline visibility fix
+    pub fn writeMeasureWithAttributes(
+        self: *const NoteAttributeGenerator,
+        xml_writer: *XmlWriter,
+        measure: *const @import("../timing/measure_detector.zig").Measure,
+        note_events: []const @import("../timing/measure_detector.zig").TimedNote,
+        tempo_marking: ?*const @import("../midi/parser.zig").TempoEvent,
+        is_first_measure: bool,
+    ) !void {
+        // Start measure
+        try self.writeMeasureStart(xml_writer, measure.number);
+        
+        // Write complete attributes with piano grand staff support
+        // Include clefs only in first measure to avoid redundancy
+        try self.writeCompleteAttributes(xml_writer, measure.number, true, is_first_measure, 0); // Default to C major for backward compatibility
+        
+        // Write tempo direction if present and first measure
+        if (tempo_marking != null and is_first_measure) {
+            // Convert MIDI tempo to BPM and write direction
+            // For now, use default 120 BPM - will be enhanced when tempo_marking is properly processed
+            const tempo = TempoMarking.fromBPM(120.0);
+            try self.writeTempoDirection(xml_writer, &tempo, "above");
+        }
+        
+        // Write notes for this measure
+        const generator = @import("generator.zig").Generator.init(self.allocator, self.divisions);
+        for (note_events) |timed_note| {
+            // Determine appropriate staff based on note pitch for piano grand staff
+            const staff_number = getStaffForNote(timed_note.note);
+            try generator.generateNoteElementWithAttributes(
+                xml_writer,
+                timed_note.note,
+                timed_note.duration,
+                false, // not a rest
+                1, // voice
+                staff_number, // staff determined by pitch
+            );
+        }
+        
+        // Write explicit barline for visibility
+        try self.writeBarline(xml_writer);
+        
+        try xml_writer.endElement(); // measure
+    }
+};
+
+// Tests for TASK-027 validation
+
+test "NoteAttributeGenerator - initialization" {
+    const allocator = std.testing.allocator;
+    const attr_generator = NoteAttributeGenerator.init(allocator, 480);
+    
+    try std.testing.expectEqual(@as(u32, 480), attr_generator.divisions);
+}
+
+test "NoteAttributeGenerator - write time signature" {
+    const allocator = std.testing.allocator;
+    var buffer = std.ArrayList(u8).init(allocator);
+    defer buffer.deinit();
+    
+    const attr_generator = NoteAttributeGenerator.init(allocator, 480);
+    var xml_writer = XmlWriter.init(allocator, buffer.writer().any());
+    defer xml_writer.deinit();
+    
+    // Test 4/4 time signature
+    try attr_generator.writeMeasureAttributes(&xml_writer, 4, 4, false);
+    
+    const output = buffer.items;
+    try std.testing.expect(std.mem.indexOf(u8, output, "<time>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "<beats>4</beats>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "<beat-type>4</beat-type>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "</time>") != null);
+}
+
+test "NoteAttributeGenerator - write tempo direction" {
+    const allocator = std.testing.allocator;
+    var buffer = std.ArrayList(u8).init(allocator);
+    defer buffer.deinit();
+    
+    const attr_generator = NoteAttributeGenerator.init(allocator, 480);
+    var xml_writer = XmlWriter.init(allocator, buffer.writer().any());
+    defer xml_writer.deinit();
+    
+    // Test tempo marking at 120 BPM
+    const tempo_marking = TempoMarking{
+        .bpm = 120.0,
+        .beat_unit = "quarter",
+    };
+    
+    try attr_generator.writeTempoDirection(&xml_writer, &tempo_marking, "above");
+    
+    const output = buffer.items;
+    try std.testing.expect(std.mem.indexOf(u8, output, "<direction placement=\"above\">") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "<direction-type>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "<metronome>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "<beat-unit>quarter</beat-unit>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "<per-minute>120.0</per-minute>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "<sound tempo=\"120.0\">") != null);
+}
+
+test "NoteAttributeGenerator - write measure with attributes" {
+    const allocator = std.testing.allocator;
+    var buffer = std.ArrayList(u8).init(allocator);
+    defer buffer.deinit();
+    
+    const attr_generator = NoteAttributeGenerator.init(allocator, 480);
+    var xml_writer = XmlWriter.init(allocator, buffer.writer().any());
+    defer xml_writer.deinit();
+    
+    // Write a complete measure
+    try attr_generator.writeMeasureStart(&xml_writer, 1);
+    try attr_generator.writeMeasureAttributes(&xml_writer, 3, 8, true);
+    try attr_generator.writeSimpleNote(&xml_writer, "C", 4, 480);
+    try xml_writer.endElement(); // measure
+    
+    const output = buffer.items;
+    
+    // Check all required elements
+    try std.testing.expect(std.mem.indexOf(u8, output, "<measure number=\"1\">") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "<attributes>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "<divisions>480</divisions>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "<time>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "<beats>3</beats>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "<beat-type>8</beat-type>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "<clef>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "</attributes>") != null);
+}
+
+test "TempoMarking - from BPM" {
+    // Test conversion from BPM
+    const marking = TempoMarking.fromBPM(120.0);
+    try std.testing.expectApproxEqAbs(@as(f64, 120.0), marking.bpm, 0.001);
+    try std.testing.expectEqualStrings("quarter", marking.beat_unit);
+}
+
+test "NoteAttributeGenerator - performance test" {
+    // Test that attribute generation meets performance target (< 2μs per note)
+    const allocator = std.testing.allocator;
+    var buffer = std.ArrayList(u8).init(allocator);
+    defer buffer.deinit();
+    
+    const attr_generator = NoteAttributeGenerator.init(allocator, 480);
+    var xml_writer = XmlWriter.init(allocator, buffer.writer().any());
+    defer xml_writer.deinit();
+    
+    const iterations = 1000;
+    const notes_per_measure = 100;
+    const start = std.time.nanoTimestamp();
+    
+    for (0..iterations) |_| {
+        buffer.clearRetainingCapacity();
+        xml_writer = XmlWriter.init(allocator, buffer.writer().any());
+        defer xml_writer.deinit();
+        
+        // Write measure with many notes
+        try attr_generator.writeMeasureStart(&xml_writer, 1);
+        try attr_generator.writeMeasureAttributes(&xml_writer, 4, 4, true);
+        
+        // Write many notes
+        for (0..notes_per_measure) |i| {
+            const pitch_steps = [_][]const u8{ "C", "D", "E", "F", "G", "A", "B" };
+            const step = pitch_steps[i % pitch_steps.len];
+            try attr_generator.writeSimpleNote(&xml_writer, step, 4, 480);
+        }
+        
+        try xml_writer.endElement(); // measure
+    }
+    
+    const end = std.time.nanoTimestamp();
+    const elapsed_ns = @as(u64, @intCast(end - start));
+    const ns_per_iteration = elapsed_ns / iterations;
+    const ns_per_note = ns_per_iteration / notes_per_measure;
+    
+    std.debug.print("Note attribute generation performance: {d} ns per note\n", .{ns_per_note});
+    
+    // Should be well under 2μs (2000ns) per note
+    try std.testing.expect(ns_per_note < 2000);
+}

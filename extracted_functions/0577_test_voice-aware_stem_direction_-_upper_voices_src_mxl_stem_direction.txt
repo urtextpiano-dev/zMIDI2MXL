@@ -1,0 +1,54 @@
+# Function Analysis: test_voice-aware_stem_direction_-_upper_voices
+
+## Metadata
+- **File**: `src/mxl/stem_direction.zig`
+- **Lines**: 372-386 (15 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "voice-aware stem direction - upper voices" {`
+
+## Function Content
+```zig
+test "voice-aware stem direction - upper voices" {
+    // Upper voices (1, 3) prefer stems up, especially for middle line notes
+    
+    // B4 (middle line) with voice 1 should go up
+    try std.testing.expectEqual(StemDirection.up, StemDirectionCalculator.calculateVoiceAwareStemDirection(71, 1));
+    
+    // B4 (middle line) with voice 3 should go up  
+    try std.testing.expectEqual(StemDirection.up, StemDirectionCalculator.calculateVoiceAwareStemDirection(71, 3));
+    
+    // Notes clearly below middle still go up
+    try std.testing.expectEqual(StemDirection.up, StemDirectionCalculator.calculateVoiceAwareStemDirection(60, 1));
+    
+    // Notes clearly above middle still go down (basic rule overrides voice preference)
+    try std.testing.expectEqual(StemDirection.down, StemDirectionCalculator.calculateVoiceAwareStemDirection(77, 1));
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+voice-aware stem direction - upper voices

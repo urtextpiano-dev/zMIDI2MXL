@@ -1,0 +1,84 @@
+# Function Analysis: assignVoices
+
+## Metadata
+- **File**: `src/voice_allocation.zig`
+- **Lines**: 132-179 (48 lines)
+- **Type**: function
+- **Visibility**: public
+- **Signature**: `pub fn assignVoices(self: *VoiceAllocator, notes: []const timing.TimedNote) VoiceAllocationError![]VoicedNote {`
+
+## Function Content
+```zig
+    pub fn assignVoices(self: *VoiceAllocator, notes: []const timing.TimedNote) VoiceAllocationError![]VoicedNote {
+        if (notes.len == 0) {
+            return self.allocator.alloc(VoicedNote, 0) catch {
+                return VoiceAllocationError.AllocationFailure;
+            };
+        }
+        
+        // Allocate result array
+        var result = self.allocator.alloc(VoicedNote, notes.len) catch {
+            return VoiceAllocationError.AllocationFailure;
+        };
+        errdefer self.allocator.free(result);
+        
+        // Convert to VoicedNote with initial voice assignment
+        for (notes, 0..) |note, i| {
+            result[i] = try VoicedNote.init(note, 1);
+        }
+        
+        // Sort by start time (required for O(n log n) algorithm)
+        std.sort.heap(VoicedNote, result, {}, compareByStartTime);
+        
+        // Reset voice states
+        for (&self.voices) |*voice| {
+            voice.last_end_tick = 0;
+            voice.note_count = 0;
+        }
+        
+        // Assign voices using greedy algorithm
+        for (result) |*voiced_note| {
+            // Find first available voice
+            var assigned = false;
+            for (&self.voices) |*voice| {
+                if (voice.isAvailableAt(voiced_note.note.start_tick)) {
+                    voiced_note.voice = voice.number;
+                    voice.assignNote(voiced_note);
+                    assigned = true;
+                    break;
+                }
+            }
+            
+            if (!assigned) {
+                // All voices are occupied - too many simultaneous notes
+                return VoiceAllocationError.TooManySimultaneousNotes;
+            }
+        }
+        
+        return result;
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

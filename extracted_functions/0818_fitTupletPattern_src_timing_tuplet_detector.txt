@@ -1,0 +1,104 @@
+# Function Analysis: fitTupletPattern
+
+## Metadata
+- **File**: `src/timing/tuplet_detector.zig`
+- **Lines**: 233-300 (68 lines)
+- **Type**: function
+- **Visibility**: private
+- **Signature**: `fn fitTupletPattern(`
+
+## Function Content
+```zig
+    fn fitTupletPattern(
+        self: *const TupletDetector,
+        notes: []const measure_detector.TimedNote,
+        tuplet_type: TupletType,
+        beat_start_tick: u32,
+        beat_length_ticks: u32,
+    ) !Tuplet {
+        _ = beat_start_tick; // Used for positioning, not needed in current implementation
+        const actual_count = tuplet_type.getActualCount();
+        _ = tuplet_type.getNormalCount(); // Will be used for MusicXML generation
+        
+        // Calculate expected timing for this tuplet
+        const expected_spacing = @as(f64, @floatFromInt(beat_length_ticks)) / @as(f64, @floatFromInt(actual_count));
+        
+        // Calculate actual spacing and timing error
+        var total_error: f64 = 0.0;
+        var max_error: f64 = 0.0;
+        
+        for (0..notes.len - 1) |i| {
+            const actual_interval = @as(f64, @floatFromInt(notes[i + 1].start_tick - notes[i].start_tick));
+            const timing_error = @abs(actual_interval - expected_spacing);
+            
+            total_error += timing_error;
+            max_error = @max(max_error, timing_error);
+        }
+        
+        const avg_error = total_error / @as(f64, @floatFromInt(notes.len - 1));
+        const relative_error = avg_error / @as(f64, @floatFromInt(beat_length_ticks));
+        
+        // Calculate confidence based on timing accuracy
+        var confidence: f64 = 1.0;
+        
+        // Penalize large relative errors
+        if (relative_error > self.config.max_timing_error) {
+            confidence *= (1.0 - relative_error);
+        }
+        
+        // Penalize very uneven spacing, but be more tolerant
+        const error_variance = calculateErrorVariance(notes, expected_spacing);
+        confidence *= @max(0.0, 1.0 - error_variance * 0.1); // Much more tolerant
+        
+        // Boost confidence for common tuplets
+        confidence *= switch (tuplet_type) {
+            .triplet => 1.2,      // Most common
+            .quintuplet => 1.0,
+            .sextuplet => 1.0,
+            .duplet => 0.9,       // Less common
+            .septuplet => 0.8,    // Rare
+            .quadruplet => 0.7,   // Very rare
+        };
+        
+        confidence = @min(1.0, confidence);
+        
+        // Debug output removed for production use
+        
+        // Determine appropriate beat unit for tuplet notation
+        const beat_unit = determineBeatUnit(beat_length_ticks, self.ppq);
+        
+        return Tuplet{
+            .tuplet_type = tuplet_type,
+            .start_tick = notes[0].start_tick,
+            .end_tick = notes[notes.len - 1].start_tick + notes[notes.len - 1].duration,
+            .notes = notes,
+            .beat_unit = beat_unit,
+            .confidence = confidence,
+            .arena = self.educational_arena,
+        };
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

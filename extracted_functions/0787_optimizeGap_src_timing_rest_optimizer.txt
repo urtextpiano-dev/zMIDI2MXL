@@ -1,0 +1,79 @@
+# Function Analysis: optimizeGap
+
+## Metadata
+- **File**: `src/timing/rest_optimizer.zig`
+- **Lines**: 249-291 (43 lines)
+- **Type**: function
+- **Visibility**: private
+- **Signature**: `fn optimizeGap(self: *RestOptimizer, gap: Gap, time_sig: TimeSignature) ![]Rest {`
+
+## Function Content
+```zig
+    fn optimizeGap(self: *RestOptimizer, gap: Gap, time_sig: TimeSignature) ![]Rest {
+        // CRITICAL: Filter negligible gaps per EXECUTIVE AUTHORITY fix
+        // Tiny timing inaccuracies should be absorbed as measurement noise, not amplified to musical rests
+        if (gap.duration < MIN_MEANINGFUL_REST_THRESHOLD) {
+            return try self.allocator.alloc(Rest, 0); // No rest for tiny gaps
+        }
+        
+        var rests = std.ArrayList(Rest).init(self.allocator);
+        errdefer rests.deinit();
+        
+        var remaining_duration = gap.duration;
+        var current_position = gap.start_time;
+        
+        while (remaining_duration > 0) {
+            // Find the best rest for this position
+            const best_rest = try self.findBestRest(
+                current_position,
+                remaining_duration,
+                gap.measure_number,
+                time_sig,
+            );
+            
+            if (best_rest.duration == 0) {
+                return RestOptimizationError.InvalidDuration;
+            }
+            
+            // Prevent integer underflow: ensure we don't subtract more than we have
+            if (best_rest.duration > remaining_duration) {
+                // Adjust the rest duration to not exceed remaining duration
+                var adjusted_rest = best_rest;
+                adjusted_rest.duration = remaining_duration;
+                try rests.append(adjusted_rest);
+                current_position += adjusted_rest.duration;
+                remaining_duration = 0;
+            } else {
+                try rests.append(best_rest);
+                current_position += best_rest.duration;
+                remaining_duration -= best_rest.duration;
+            }
+        }
+        
+        return rests.toOwnedSlice();
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

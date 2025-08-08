@@ -1,0 +1,82 @@
+# Function Analysis: test_Key_signature_parsing_-_mixed_with_all_meta_events
+
+## Metadata
+- **File**: `src/midi/parser.zig`
+- **Lines**: 4158-4200 (43 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "Key signature parsing - mixed with all meta events" {`
+
+## Function Content
+```zig
+test "Key signature parsing - mixed with all meta events" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    
+    // Track with tempo, time signature, and key signature events
+    const track_data = [_]u8{
+        0x00,                          // Delta time: 0
+        0xFF, 0x51, 0x03,             // Set Tempo meta event
+        0x07, 0xA1, 0x20,             // 500,000 μs = 120 BPM
+        0x00,                          // Delta time: 0
+        0xFF, 0x58, 0x04,             // Time Signature meta event
+        0x03, 0x02, 0x18, 0x08,       // 3/4 time
+        0x00,                          // Delta time: 0
+        0xFF, 0x59, 0x02,             // Key Signature meta event
+        0xFE, 0x00,                   // G minor (2 flats)
+        0x00,                          // Delta time: 0
+        0x90, 0x3C, 0x64,             // Note On C4
+        0x60,                          // Delta time: 96
+        0x80, 0x3C, 0x40,             // Note Off C4
+        0x00,                          // Delta time: 0
+        0xFF, 0x2F, 0x00,             // End of Track
+    };
+    
+    var result = try parseTrackEvents(allocator, &track_data);
+    defer result.deinit(allocator);
+    
+    // Verify all meta events were parsed
+    try std.testing.expectEqual(@as(usize, 1), result.tempo_events.items.len);
+    try std.testing.expectEqual(@as(usize, 1), result.time_signature_events.items.len);
+    try std.testing.expectEqual(@as(usize, 1), result.key_signature_events.items.len);
+    try std.testing.expectEqual(@as(usize, 2), result.note_events.items.len);
+    
+    // Verify key signature
+    const key_sig = result.key_signature_events.items[0];
+    try std.testing.expectEqual(@as(i8, -2), key_sig.sharps_flats);
+    try std.testing.expectEqual(true, key_sig.is_minor);
+    try std.testing.expectEqualStrings("G", key_sig.getKeyName());
+    
+    var buffer: [32]u8 = undefined;
+    const key_string = try key_sig.toString(&buffer);
+    try std.testing.expectEqualStrings("G minor", key_string);
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+Key signature parsing - mixed with all meta events

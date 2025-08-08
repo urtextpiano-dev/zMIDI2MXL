@@ -1,0 +1,91 @@
+# Function Analysis: test_Time_signature_event_parsing_-_various_time_signatures
+
+## Metadata
+- **File**: `src/midi/parser.zig`
+- **Lines**: 3714-3765 (52 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "Time signature event parsing - various time signatures" {`
+
+## Function Content
+```zig
+test "Time signature event parsing - various time signatures" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    
+    // Test cases for different time signatures
+    const test_cases = [_]struct {
+        data: [4]u8,
+        expected_numerator: u8,
+        expected_denominator: u8,
+        expected_string: []const u8,
+        is_compound: bool,
+    }{
+        // 3/4 time
+        .{ .data = [_]u8{ 0x03, 0x02, 0x18, 0x08 }, .expected_numerator = 3, .expected_denominator = 4, .expected_string = "3/4", .is_compound = false },
+        // 6/8 time (compound)
+        .{ .data = [_]u8{ 0x06, 0x03, 0x24, 0x08 }, .expected_numerator = 6, .expected_denominator = 8, .expected_string = "6/8", .is_compound = true },
+        // 7/8 time
+        .{ .data = [_]u8{ 0x07, 0x03, 0x15, 0x08 }, .expected_numerator = 7, .expected_denominator = 8, .expected_string = "7/8", .is_compound = false },
+        // 12/8 time (compound)
+        .{ .data = [_]u8{ 0x0C, 0x03, 0x24, 0x08 }, .expected_numerator = 12, .expected_denominator = 8, .expected_string = "12/8", .is_compound = true },
+        // 2/2 time (cut time)
+        .{ .data = [_]u8{ 0x02, 0x01, 0x18, 0x08 }, .expected_numerator = 2, .expected_denominator = 2, .expected_string = "2/2", .is_compound = false },
+        // 5/4 time
+        .{ .data = [_]u8{ 0x05, 0x02, 0x18, 0x08 }, .expected_numerator = 5, .expected_denominator = 4, .expected_string = "5/4", .is_compound = false },
+    };
+    
+    for (test_cases) |test_case| {
+        const track_data = [_]u8{
+            0x00,                          // Delta time: 0
+            0xFF, 0x58, 0x04,             // Time Signature meta event
+        } ++ test_case.data ++ [_]u8{
+            0x00,                          // Delta time: 0
+            0xFF, 0x2F, 0x00,             // End of Track
+        };
+        
+        var result = try parseTrackEvents(allocator, &track_data);
+        defer result.deinit(allocator);
+        
+        try std.testing.expectEqual(@as(usize, 1), result.time_signature_events.items.len);
+        
+        const time_sig = result.time_signature_events.items[0];
+        try std.testing.expectEqual(test_case.expected_numerator, time_sig.numerator);
+        try std.testing.expectEqual(test_case.expected_denominator, time_sig.getDenominator());
+        
+        var buffer: [16]u8 = undefined;
+        const str = try time_sig.toString(&buffer);
+        try std.testing.expectEqualStrings(test_case.expected_string, str);
+        
+        try std.testing.expectEqual(test_case.is_compound, time_sig.isCompound());
+    }
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+Time signature event parsing - various time signatures

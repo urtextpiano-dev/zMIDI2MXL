@@ -1,0 +1,93 @@
+# Function Analysis: createBeamGroupConstraints
+
+## Metadata
+- **File**: `src/educational_processor.zig`
+- **Lines**: 3032-3088 (57 lines)
+- **Type**: function
+- **Visibility**: private
+- **Signature**: `fn createBeamGroupConstraints(self: *EducationalProcessor, notes: []enhanced_note.EnhancedTimedNote) ![]rest_optimizer.BeamGroupConstraint {`
+
+## Function Content
+```zig
+    fn createBeamGroupConstraints(self: *EducationalProcessor, notes: []enhanced_note.EnhancedTimedNote) ![]rest_optimizer.BeamGroupConstraint {
+        var constraints = std.ArrayList(rest_optimizer.BeamGroupConstraint).init(self.arena.allocator());
+        defer constraints.deinit();
+        
+        var current_group_id: ?u32 = null;
+        var group_start: u32 = 0;
+        var group_end: u32 = 0;
+        var group_level: u8 = 1;
+        
+        // Process notes to identify beam groups
+        for (notes) |note| {
+            // Skip rest notes
+            if (note.base_note.velocity == 0) continue;
+            
+            // Check if this note has beam information
+            if (note.beaming_info) |beam_info| {
+                if (beam_info.beam_group_id) |group_id| {
+                    // Starting a new beam group
+                    if (current_group_id == null or current_group_id.? != group_id) {
+                        // Finalize previous group if it exists
+                        if (current_group_id != null) {
+                            const constraint = rest_optimizer.BeamGroupConstraint{
+                                .group_id = current_group_id.?,
+                                .start_time = group_start,
+                                .end_time = group_end,
+                                .beam_level = group_level,
+                            };
+                            try constraints.append(constraint);
+                        }
+                        
+                        // Start new group
+                        current_group_id = group_id;
+                        group_start = note.base_note.start_tick;
+                        group_end = note.base_note.start_tick + note.base_note.duration;
+                        group_level = beam_info.beam_level;
+                    } else {
+                        // Continue current group
+                        group_end = @max(group_end, note.base_note.start_tick + note.base_note.duration);
+                        group_level = @max(group_level, beam_info.beam_level);
+                    }
+                }
+            }
+        }
+        
+        // Finalize last group if it exists
+        if (current_group_id != null) {
+            const constraint = rest_optimizer.BeamGroupConstraint{
+                .group_id = current_group_id.?,
+                .start_time = group_start,
+                .end_time = group_end,
+                .beam_level = group_level,
+            };
+            try constraints.append(constraint);
+        }
+        
+        return constraints.toOwnedSlice();
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

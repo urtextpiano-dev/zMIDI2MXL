@@ -1,0 +1,79 @@
+# Function Analysis: computeRestScore
+
+## Metadata
+- **File**: `src/timing/rest_optimizer.zig`
+- **Lines**: 613-655 (43 lines)
+- **Type**: function
+- **Visibility**: private
+- **Signature**: `fn computeRestScore(self: *RestOptimizer, start_time: u32, duration: u32, rest_type: NoteType, dots: u8, time_sig: TimeSignature) f32 {`
+
+## Function Content
+```zig
+    fn computeRestScore(self: *RestOptimizer, start_time: u32, duration: u32, rest_type: NoteType, dots: u8, time_sig: TimeSignature) f32 {
+        var score: f32 = 0.0;
+        
+        // Beat alignment score
+        const position_in_measure = start_time % time_sig.measure_duration;
+        const position_in_beat = position_in_measure % time_sig.beat_duration;
+        
+        // Perfect alignment on beat boundary
+        if (position_in_beat == 0) {
+            score += self.config.beat_alignment_weight * 1.0;
+        }
+        // Half-beat alignment (useful for compound meters)
+        else if (position_in_beat == time_sig.beat_duration / 2) {
+            score += self.config.beat_alignment_weight * 0.5;
+        }
+        
+        // Check if rest ends on beat boundary
+        const end_position = (start_time + duration) % time_sig.measure_duration;
+        const end_in_beat = end_position % time_sig.beat_duration;
+        if (end_in_beat == 0) {
+            score += self.config.beat_alignment_weight * 0.5;
+        }
+        
+        // Simplicity score - prefer fewer, larger rests
+        const simplicity_score: f32 = switch (rest_type) {
+            .whole => 1.0,
+            .half => 0.9,
+            .quarter => 0.8,
+            .eighth => 0.6,
+            .@"16th" => 0.4,
+            .@"32nd" => 0.2,
+            else => 0.1,
+        };
+        score += self.config.simplicity_weight * simplicity_score;
+        
+        // Penalize dots slightly (simpler is better for education)
+        score -= @as(f32, @floatFromInt(dots)) * 0.2;
+        
+        // Convention score - common patterns
+        score += self.computeConventionScore(rest_type, position_in_measure, time_sig);
+        
+        return score;
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

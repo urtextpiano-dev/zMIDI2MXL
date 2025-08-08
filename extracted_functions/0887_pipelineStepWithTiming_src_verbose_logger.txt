@@ -1,0 +1,65 @@
+# Function Analysis: pipelineStepWithTiming
+
+## Metadata
+- **File**: `src/verbose_logger.zig`
+- **Lines**: 1321-1349 (29 lines)
+- **Type**: function
+- **Visibility**: public
+- **Signature**: `pub fn pipelineStepWithTiming(self: *Self, pipeline_step: PipelineSteps, duration_ns: u64, comptime format: []const u8, args: anytype) void {`
+
+## Function Content
+```zig
+    pub fn pipelineStepWithTiming(self: *Self, pipeline_step: PipelineSteps, duration_ns: u64, comptime format: []const u8, args: anytype) void {
+        if (!self.enabled) {
+            // Even when verbose logging is disabled, still track step execution for verification
+            self.step_registry.markExecutedWithTiming(pipeline_step, duration_ns);
+            return;
+        }
+        
+        // Mark step as executed with timing in registry
+        self.step_registry.markExecutedWithTiming(pipeline_step, duration_ns);
+        
+        // Format the step ID and log with description and timing
+        var buf: [32]u8 = undefined;
+        const step_str = pipeline_step.format(&buf) catch "[???.???.???]";
+        
+        const indent = self.getIndent();
+        const ms = @as(f64, @floatFromInt(duration_ns)) / 1_000_000.0;
+        
+        if (ms > 1.0) {
+            self.logger.info("{s}{s} {s} ({d:.2}ms)", .{ indent, step_str, pipeline_step.getDescription(), ms });
+        } else {
+            const us = @as(f64, @floatFromInt(duration_ns)) / 1_000.0;
+            self.logger.info("{s}{s} {s} ({d:.2}μs)", .{ indent, step_str, pipeline_step.getDescription(), us });
+        }
+        
+        // Also log the custom format message if provided
+        if (format.len > 0) {
+            self.logger.debug("{s}      " ++ format, .{indent} ++ args);
+        }
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

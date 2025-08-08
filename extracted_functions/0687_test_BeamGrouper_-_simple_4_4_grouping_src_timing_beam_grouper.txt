@@ -1,0 +1,105 @@
+# Function Analysis: test_BeamGrouper_-_simple_4/4_grouping
+
+## Metadata
+- **File**: `src/timing/beam_grouper.zig`
+- **Lines**: 742-807 (66 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "BeamGrouper - simple 4/4 grouping" {`
+
+## Function Content
+```zig
+test "BeamGrouper - simple 4/4 grouping" {
+    const allocator = std.testing.allocator;
+    const grouper = BeamGrouper.init(allocator, 480);
+    
+    // Create a test measure in 4/4
+    const time_sig = midi_parser.TimeSignatureEvent{
+        .tick = 0,
+        .numerator = 4,
+        .denominator_power = 2,  // 4/4 time
+        .clocks_per_metronome = 24,
+        .thirtysecond_notes_per_quarter = 8,
+    };
+    
+    var measure = measure_detector.Measure.init(allocator, 1, 0, 1920, time_sig);
+    defer measure.deinit();
+    
+    // Add four eighth notes (should be grouped in pairs)
+    const eighth_duration = 240; // 480 / 2
+    const notes = [_]measure_detector.TimedNote{
+        .{ .note = 60, .channel = 0, .velocity = 80, .start_tick = 0, .duration = eighth_duration },
+        .{ .note = 62, .channel = 0, .velocity = 80, .start_tick = 240, .duration = eighth_duration },
+        .{ .note = 64, .channel = 0, .velocity = 80, .start_tick = 480, .duration = eighth_duration },
+        .{ .note = 65, .channel = 0, .velocity = 80, .start_tick = 720, .duration = eighth_duration },
+    };
+    
+    for (notes) |note| {
+        try measure.addNote(note);
+    }
+    
+    // Create note types (all eighth notes)
+    const note_types = [_]note_type_converter.NoteTypeResult{
+        .{ .note_type = .eighth, .dots = 0 },
+        .{ .note_type = .eighth, .dots = 0 },
+        .{ .note_type = .eighth, .dots = 0 },
+        .{ .note_type = .eighth, .dots = 0 },
+    };
+    
+    const groups = try grouper.groupBeamsInMeasure(&measure, &note_types);
+    defer {
+        for (groups) |*group| {
+            group.deinit();
+        }
+        allocator.free(groups);
+    }
+    
+    // Should have 2 groups (pairs of eighth notes)
+    try std.testing.expect(groups.len >= 1);
+    
+    // Check first group has beam states assigned
+    if (groups.len > 0) {
+        const first_group = &groups[0];
+        try std.testing.expect(first_group.notes.items.len >= 1);
+        
+        if (first_group.notes.items.len >= 2) {
+            // First note should have "begin" state
+            const first_note = &first_group.notes.items[0];
+            try std.testing.expect(first_note.beams.items.len > 0);
+            try std.testing.expectEqual(BeamState.begin, first_note.beams.items[0].state);
+            
+            // Last note should have "end" state
+            const last_note = &first_group.notes.items[first_group.notes.items.len - 1];
+            try std.testing.expect(last_note.beams.items.len > 0);
+            try std.testing.expectEqual(BeamState.end, last_note.beams.items[0].state);
+        }
+    }
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+BeamGrouper - simple 4/4 grouping

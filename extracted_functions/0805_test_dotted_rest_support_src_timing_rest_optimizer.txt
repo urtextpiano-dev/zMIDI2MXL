@@ -1,0 +1,70 @@
+# Function Analysis: test_dotted_rest_support
+
+## Metadata
+- **File**: `src/timing/rest_optimizer.zig`
+- **Lines**: 957-987 (31 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "dotted rest support" {`
+
+## Function Content
+```zig
+test "dotted rest support" {
+    const allocator = testing.allocator;
+    const config = RestOptimizerConfig{
+        .allow_dotted_rests = true,
+        .max_dots = 1,
+    };
+    var optimizer = RestOptimizer.initWithConfig(allocator, 480, config);
+    
+    const time_sig = TimeSignature{
+        .numerator = 3,
+        .denominator = 4,
+        .measure_duration = 1440, // 3 quarters
+        .beat_duration = 480,
+    };
+    
+    // Full measure in 3/4 should use dotted half rest
+    const gaps = [_]Gap{
+        Gap{
+            .start_time = 0,
+            .duration = 1440,
+            .measure_number = 1,
+        },
+    };
+    
+    const rests = try optimizer.optimizeRests(&gaps, time_sig);
+    defer allocator.free(rests);
+    
+    // Should create whole rest (convention for empty measures)
+    try testing.expectEqual(@as(usize, 1), rests.len);
+    try testing.expectEqual(NoteType.whole, rests[0].note_type);
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+dotted rest support

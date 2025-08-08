@@ -1,0 +1,83 @@
+# Function Analysis: test_Text_event_parsing_-_mixed_with_other_meta_events
+
+## Metadata
+- **File**: `src/midi/parser.zig`
+- **Lines**: 5286-5329 (44 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "Text event parsing - mixed with other meta events" {`
+
+## Function Content
+```zig
+test "Text event parsing - mixed with other meta events" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    
+    // Track with text events mixed with other meta events
+    const track_data = [_]u8{
+        0x00,                             // Delta time: 0
+        0xFF, 0x03, 0x08,                 // Track name meta event
+        'T', 'e', 's', 't', ' ', 'S', 'o', 'n',
+        0x00,                             // Delta time: 0
+        0xFF, 0x51, 0x03,                 // Set Tempo meta event
+        0x07, 0xA1, 0x20,                 // 120 BPM
+        0x00,                             // Delta time: 0
+        0xFF, 0x01, 0x05,                 // Text event
+        'H', 'e', 'l', 'l', 'o',
+        0x00,                             // Delta time: 0
+        0xFF, 0x58, 0x04,                 // Time signature meta event
+        0x04, 0x02, 0x18, 0x08,           // 4/4 time
+        0x00,                             // Delta time: 0
+        0xFF, 0x05, 0x03,                 // Lyric text event
+        'L', 'a', ' ',
+        0x00,                             // Delta time: 0
+        0xFF, 0x2F, 0x00,                 // End of track
+    };
+    
+    var result = try parseTrackEvents(allocator, &track_data);
+    defer result.deinit(allocator);
+    
+    // Verify all meta events were parsed
+    try std.testing.expectEqual(@as(usize, 3), result.text_events.items.len);  // 3 text events
+    try std.testing.expectEqual(@as(usize, 1), result.tempo_events.items.len);
+    try std.testing.expectEqual(@as(usize, 1), result.time_signature_events.items.len);
+    
+    // Verify text events
+    try std.testing.expectEqualStrings("Test Son", result.text_events.items[0].text);
+    try std.testing.expectEqual(@as(u8, 0x03), result.text_events.items[0].event_type);
+    
+    try std.testing.expectEqualStrings("Hello", result.text_events.items[1].text);
+    try std.testing.expectEqual(@as(u8, 0x01), result.text_events.items[1].event_type);
+    
+    try std.testing.expectEqualStrings("La ", result.text_events.items[2].text);
+    try std.testing.expectEqual(@as(u8, 0x05), result.text_events.items[2].event_type);
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+Text event parsing - mixed with other meta events

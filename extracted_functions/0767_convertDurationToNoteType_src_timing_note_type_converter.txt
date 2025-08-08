@@ -1,0 +1,81 @@
+# Function Analysis: convertDurationToNoteType
+
+## Metadata
+- **File**: `src/timing/note_type_converter.zig`
+- **Lines**: 112-156 (45 lines)
+- **Type**: function
+- **Visibility**: public
+- **Signature**: `pub fn convertDurationToNoteType(self: *const NoteTypeConverter, duration: u32) ?NoteTypeResult {`
+
+## Function Content
+```zig
+    pub fn convertDurationToNoteType(self: *const NoteTypeConverter, duration: u32) ?NoteTypeResult {
+        // Try each note type from longest to shortest
+        const note_types = [_]NoteType{
+            .breve, .whole, .half, .quarter, .eighth,
+            .@"16th", .@"32nd", .@"64th", .@"128th", .@"256th",
+        };
+        
+        for (note_types) |note_type| {
+            const base_duration = note_type.getDurationInDivisions(self.divisions_per_quarter);
+            
+            // Skip if duration is too small for this note type
+            const min_duration = @as(f64, @floatFromInt(base_duration)) * (1.0 - self.tolerance_percent);
+            if (@as(f64, @floatFromInt(duration)) < min_duration) {
+                continue;
+            }
+            
+            // Check if it's a simple note without dots
+            if (self.isWithinTolerance(duration, base_duration)) {
+                return NoteTypeResult{ .note_type = note_type, .dots = 0 };
+            }
+            
+            // Check for dotted notes (up to 4 dots)
+            var dots: u8 = 0;
+            var total_duration = base_duration;
+            var dot_duration = base_duration / 2;
+            
+            while (dots < 4) : (dots += 1) {
+                const test_duration = total_duration + dot_duration;
+                
+                if (self.isWithinTolerance(duration, test_duration)) {
+                    return NoteTypeResult{ .note_type = note_type, .dots = dots + 1 };
+                }
+                
+                if (test_duration > duration) {
+                    break;  // No point checking more dots
+                }
+                
+                total_duration = test_duration;
+                dot_duration /= 2;
+            }
+        }
+        
+        // No single note type with dots can represent this duration
+        return null;
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

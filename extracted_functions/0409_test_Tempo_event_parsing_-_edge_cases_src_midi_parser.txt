@@ -1,0 +1,71 @@
+# Function Analysis: test_Tempo_event_parsing_-_edge_cases
+
+## Metadata
+- **File**: `src/midi/parser.zig`
+- **Lines**: 3250-3281 (32 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "Tempo event parsing - edge cases" {`
+
+## Function Content
+```zig
+test "Tempo event parsing - edge cases" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    
+    // Test extreme tempo values
+    {
+        const track_data = [_]u8{
+            0x00,                          // Delta time: 0
+            0xFF, 0x51, 0x03,             // Set Tempo meta event
+            0xFF, 0xFF, 0xFF,             // Maximum tempo (16,777,215 μs ≈ 3.58 BPM)
+            0x00,                          // Delta time: 0
+            0xFF, 0x51, 0x03,             // Set Tempo meta event
+            0x00, 0x00, 0x01,             // Minimum tempo (1 μs = 60,000,000 BPM)
+            0x00,                          // Delta time: 0
+            0xFF, 0x2F, 0x00,             // End of Track
+        };
+        
+        var result = try parseTrackEvents(allocator, &track_data);
+        defer result.deinit(allocator);
+        
+        try std.testing.expectEqual(@as(usize, 2), result.tempo_events.items.len);
+        
+        const slow_tempo = result.tempo_events.items[0];
+        try std.testing.expectEqual(@as(u32, 16_777_215), slow_tempo.microseconds_per_quarter);
+        try std.testing.expectApproxEqAbs(@as(f64, 3.576), slow_tempo.toBPM(), 0.001);
+        
+        const fast_tempo = result.tempo_events.items[1];
+        try std.testing.expectEqual(@as(u32, 1), fast_tempo.microseconds_per_quarter);
+        try std.testing.expectEqual(@as(f64, 60_000_000.0), fast_tempo.toBPM());
+    }
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+Tempo event parsing - edge cases

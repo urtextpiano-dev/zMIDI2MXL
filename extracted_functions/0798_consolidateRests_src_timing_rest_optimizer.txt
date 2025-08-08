@@ -1,0 +1,79 @@
+# Function Analysis: consolidateRests
+
+## Metadata
+- **File**: `src/timing/rest_optimizer.zig`
+- **Lines**: 739-781 (43 lines)
+- **Type**: function
+- **Visibility**: private
+- **Signature**: `fn consolidateRests(self: *RestOptimizer, rests: []const Rest, time_sig: TimeSignature) ![]Rest {`
+
+## Function Content
+```zig
+    fn consolidateRests(self: *RestOptimizer, rests: []const Rest, time_sig: TimeSignature) ![]Rest {
+        if (rests.len == 0) return try self.allocator.alloc(Rest, 0);
+        
+        var consolidated = std.ArrayList(Rest).init(self.allocator);
+        errdefer consolidated.deinit();
+        
+        var i: usize = 0;
+        while (i < rests.len) {
+            var current_rest = rests[i];
+            var j = i + 1;
+            
+            // Look for adjacent rests that can be combined
+            while (j < rests.len and 
+                   rests[j].start_time == current_rest.start_time + current_rest.duration and
+                   rests[j].measure_number == current_rest.measure_number) {
+                const combined_duration = current_rest.duration + rests[j].duration;
+                
+                // Check if combined rest would be valid and better
+                if (self.canCombineRests(current_rest, rests[j], time_sig)) {
+                    // Try to find a single rest that represents the combined duration
+                    const combined_rest = try self.findBestRest(
+                        current_rest.start_time,
+                        combined_duration,
+                        current_rest.measure_number,
+                        time_sig,
+                    );
+                    
+                    // Only combine if the score improves
+                    if (combined_rest.alignment_score > current_rest.alignment_score + rests[j].alignment_score * 0.5) {
+                        current_rest = combined_rest;
+                        j += 1;
+                        continue;
+                    }
+                }
+                break;
+            }
+            
+            try consolidated.append(current_rest);
+            i = j;
+        }
+        
+        return consolidated.toOwnedSlice();
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

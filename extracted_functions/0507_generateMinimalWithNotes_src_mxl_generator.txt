@@ -1,0 +1,113 @@
+# Function Analysis: generateMinimalWithNotes
+
+## Metadata
+- **File**: `src/mxl/generator.zig`
+- **Lines**: 409-485 (77 lines)
+- **Type**: function
+- **Visibility**: public
+- **Signature**: `pub fn generateMinimalWithNotes(self: *const Generator, writer: anytype) !void {`
+
+## Function Content
+```zig
+    pub fn generateMinimalWithNotes(self: *const Generator, writer: anytype) !void {
+        var xml_writer = XmlWriter.init(self.allocator, writer.any());
+        defer xml_writer.deinit();
+
+        // Write header
+        try xml_writer.writeDeclaration();
+        try xml_writer.writeDoctype("score-partwise", "-//Recordare//DTD MusicXML 4.0 Partwise//EN", "http://www.musicxml.org/dtds/partwise.dtd");
+
+        // Start root element
+        try xml_writer.startElement("score-partwise", &[_]Attribute{
+            .{ .name = "version", .value = "4.0" },
+        });
+
+        // Part-list
+        try xml_writer.startElement("part-list", null);
+        try xml_writer.startElement("score-part", &[_]Attribute{
+            .{ .name = "id", .value = "P1" },
+        });
+        try xml_writer.writeElement("part-name", "Piano", null);
+        try xml_writer.endElement(); // score-part
+        try xml_writer.endElement(); // part-list
+
+        // Part
+        try xml_writer.startElement("part", &[_]Attribute{
+            .{ .name = "id", .value = "P1" },
+        });
+
+        // Measure 1
+        try xml_writer.startElement("measure", &[_]Attribute{
+            .{ .name = "number", .value = "1" },
+        });
+
+        // Attributes
+        try xml_writer.startElement("attributes", null);
+
+        var buf: [32]u8 = undefined;
+        const divisions_str = try std.fmt.bufPrint(&buf, "{d}", .{self.quantizer.getNormalizedDivisions()});
+        try xml_writer.writeElement("divisions", divisions_str, null);
+
+        // Add key signature (C major)
+        try xml_writer.startElement("key", null);
+        try xml_writer.writeElement("fifths", "0", null);
+        try xml_writer.endElement(); // key
+
+        // Add time signature (4/4)
+        try xml_writer.startElement("time", null);
+        try xml_writer.writeElement("beats", "4", null);
+        try xml_writer.writeElement("beat-type", "4", null);
+        try xml_writer.endElement(); // time
+
+        // Add clef
+        try xml_writer.startElement("clef", null);
+        try xml_writer.writeElement("sign", "G", null);
+        try xml_writer.writeElement("line", "2", null);
+        try xml_writer.endElement(); // clef
+
+        try xml_writer.endElement(); // attributes
+
+        // Add a simple note (middle C, quarter note)
+        try xml_writer.startElement("note", null);
+
+        try xml_writer.startElement("pitch", null);
+        try xml_writer.writeElement("step", "C", null);
+        try xml_writer.writeElement("octave", "4", null);
+        try xml_writer.endElement(); // pitch
+
+        // Use quarter note duration
+        const duration_str = try std.fmt.bufPrint(&buf, "{d}", .{self.divisions});
+        try xml_writer.writeElement("duration", duration_str, null);
+        try xml_writer.writeElement("type", "quarter", null);
+
+        try xml_writer.endElement(); // note
+
+        try xml_writer.endElement(); // measure
+        try xml_writer.endElement(); // part
+        try xml_writer.endElement(); // score-partwise
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

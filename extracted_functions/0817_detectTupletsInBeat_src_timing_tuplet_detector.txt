@@ -1,0 +1,84 @@
+# Function Analysis: detectTupletsInBeat
+
+## Metadata
+- **File**: `src/timing/tuplet_detector.zig`
+- **Lines**: 181-228 (48 lines)
+- **Type**: function
+- **Visibility**: public
+- **Signature**: `pub fn detectTupletsInBeat(`
+
+## Function Content
+```zig
+    pub fn detectTupletsInBeat(
+        self: *const TupletDetector,
+        notes: []const measure_detector.TimedNote,
+        beat_start_tick: u32,
+        beat_length_ticks: u32,
+    ) ![]Tuplet {
+        if (notes.len < 2) return &[_]Tuplet{};
+        
+        var detected_tuplets = std.ArrayList(Tuplet).init(self.allocator);
+        errdefer detected_tuplets.deinit();
+        
+        // Group notes by potential tuplet divisions
+        const note_count = notes.len;
+        
+        // Skip if this is a standard power-of-2 division
+        if (isPowerOfTwo(note_count)) {
+            return detected_tuplets.toOwnedSlice();
+        }
+        
+        // Try each tuplet type to see if it fits
+        for (self.config.tuplet_types) |tuplet_type| {
+            const actual_count = tuplet_type.getActualCount();
+            
+            // Skip if note count doesn't match tuplet
+            if (note_count != actual_count) continue;
+            
+            const fit_result = try self.fitTupletPattern(
+                notes,
+                tuplet_type,
+                beat_start_tick,
+                beat_length_ticks,
+            );
+            
+            if (fit_result.confidence >= self.config.min_confidence) {
+                // Store arena reference for cleanup tracking
+                if (self.educational_arena) |arena| {
+                    var tuplet_copy = fit_result;
+                    tuplet_copy.arena = arena;
+                    try detected_tuplets.append(tuplet_copy);
+                } else {
+                    try detected_tuplets.append(fit_result);
+                }
+                break; // Use first good fit
+            }
+        }
+        
+        return detected_tuplets.toOwnedSlice();
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

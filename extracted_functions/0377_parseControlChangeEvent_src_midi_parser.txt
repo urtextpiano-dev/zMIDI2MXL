@@ -1,0 +1,105 @@
+# Function Analysis: parseControlChangeEvent
+
+## Metadata
+- **File**: `src/midi/parser.zig`
+- **Lines**: 2041-2109 (69 lines)
+- **Type**: function
+- **Visibility**: private
+- **Signature**: `fn parseControlChangeEvent(state: *TrackParserState, result: *TrackParseResult, status_byte: u8) (error_mod.MidiError || std.mem.Allocator.Error)!bool {`
+
+## Function Content
+```zig
+fn parseControlChangeEvent(state: *TrackParserState, result: *TrackParseResult, status_byte: u8) (error_mod.MidiError || std.mem.Allocator.Error)!bool {
+    // Need 2 data bytes for control change events
+    if (state.remainingBytes() < 2) {
+        return error_mod.MidiError.UnexpectedEndOfFile;
+    }
+    
+    const controller = state.data[state.position];
+    const value = state.data[state.position + 1];
+    state.position += 2;
+    
+    // Validate controller and value ranges per MIDI spec
+    if (controller > 127 or value > 127) {
+        return error_mod.MidiError.InvalidEventData;
+    }
+    
+    // TASK-016: Track all control change events (0-127)
+    const event = ControlChangeEvent{
+        .tick = state.current_tick,
+        .channel = extractChannelFromStatus(status_byte),
+        .controller = @intCast(controller),
+        .value = @intCast(value),
+    };
+    
+    try result.control_change_events.append(event);
+    
+    // TASK-018: Process RPN/NRPN controller sequences
+    // Handle RPN/NRPN parameter selection and data entry per MIDI_Architecture_Corrections.md Section B
+    const channel = extractChannelFromStatus(status_byte);
+    const controller_u7: u7 = @intCast(controller);
+    const value_u7: u7 = @intCast(value);
+    
+    switch (controller_u7) {
+        // RPN MSB/LSB selection (CC#101/100)
+        101 => state.rpn_state.selectRpn(value_u7, state.rpn_state.current_rpn_lsb orelse 0),
+        100 => {
+            const msb = state.rpn_state.current_rpn_msb orelse 0;
+            state.rpn_state.selectRpn(msb, value_u7);
+        },
+        
+        // NRPN MSB/LSB selection (CC#99/98)
+        99 => state.rpn_state.selectNrpn(value_u7, state.rpn_state.current_nrpn_lsb orelse 0),
+        98 => {
+            const msb = state.rpn_state.current_nrpn_msb orelse 0;
+            state.rpn_state.selectNrpn(msb, value_u7);
+        },
+        
+        // Data Entry MSB/LSB (CC#6/38) - creates complete RPN/NRPN event
+        6 => { // Data Entry MSB
+            if (state.rpn_state.setDataEntry(value_u7, null)) |rpn_template| {
+                var rpn_event = rpn_template;
+                rpn_event.tick = state.current_tick;
+                rpn_event.channel = channel;
+                try result.rpn_events.append(rpn_event);
+            }
+        },
+        38 => { // Data Entry LSB
+            if (state.rpn_state.setDataEntry(null, value_u7)) |rpn_template| {
+                var rpn_event = rpn_template;
+                rpn_event.tick = state.current_tick;
+                rpn_event.channel = channel;
+                try result.rpn_events.append(rpn_event);
+            }
+        },
+        
+        else => {} // Other controllers don't affect RPN/NRPN state
+    }
+    
+    return true;
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

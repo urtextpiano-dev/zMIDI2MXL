@@ -1,0 +1,86 @@
+# Function Analysis: convertTicksToDivisions
+
+## Metadata
+- **File**: `src/timing/division_converter.zig`
+- **Lines**: 91-140 (50 lines)
+- **Type**: function
+- **Visibility**: public
+- **Signature**: `pub fn convertTicksToDivisions(self: *const DivisionConverter, midi_ticks: u32) TimingError!u32 {`
+
+## Function Content
+```zig
+    pub fn convertTicksToDivisions(self: *const DivisionConverter, midi_ticks: u32) TimingError!u32 {
+        if (midi_ticks > std.math.maxInt(u32) / 2) {
+            return TimingError.InvalidTickValue;
+        }
+        
+        // Use pre-calculated ratio for O(1) conversion
+        const result_f64 = @as(f64, @floatFromInt(midi_ticks)) * self.conversion_ratio;
+        
+        // Add precision tracking - TASK-VL-002
+        if (verbose_logger.getVerboseLogger().precision_monitor.enabled) {
+            const rounded = @round(result_f64);
+            
+            // Track the precision loss in the conversion itself
+            // We want to see if result_f64 != rounded (i.e., fractional part was lost)
+            if (result_f64 != rounded) {
+                verbose_logger.getVerboseLogger().precision_monitor.trackExactOperation(
+                    "convertTicksToDivisions",
+                    result_f64,  // The exact calculated value
+                    rounded,     // The rounded value we'll use
+                    .{
+                        .file = "timing/division_converter.zig",
+                        .function = "convertTicksToDivisions",
+                        .line = 97,
+                    },
+                );
+            }
+            
+            // Log detailed info for any significant precision loss
+            if (@abs(result_f64 - rounded) > 0.001) {
+                const vlogger = verbose_logger.getVerboseLogger();
+                vlogger.data("Precision loss detected: ticks={}, ratio={d:.6}, exact={d:.6}, rounded={d}", 
+                    .{midi_ticks, self.conversion_ratio, result_f64, rounded});
+                vlogger.data("MIDI PPQ: {}, MusicXML divisions: {}", 
+                    .{self.midi_ppq, self.musicxml_divisions});
+            }
+        }
+        
+        // Check for precision loss (avoid division by zero)
+        const rounded_result = @round(result_f64);
+        if (result_f64 > 1.0) { // Only check precision for meaningful values
+            const precision_loss = @abs(result_f64 - rounded_result) / result_f64;
+            
+            if (precision_loss > MAX_PRECISION_LOSS) {
+                return TimingError.PrecisionLoss;
+            }
+        }
+        
+        const result = @as(u32, @intFromFloat(rounded_result));
+        return result;
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

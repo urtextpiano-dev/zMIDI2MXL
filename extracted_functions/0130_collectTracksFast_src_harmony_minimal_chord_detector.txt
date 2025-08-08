@@ -1,0 +1,59 @@
+# Function Analysis: collectTracksFast
+
+## Metadata
+- **File**: `src/harmony/minimal_chord_detector.zig`
+- **Lines**: 127-149 (23 lines)
+- **Type**: function
+- **Visibility**: private
+- **Signature**: `fn collectTracksFast(allocator: std.mem.Allocator, notes: []const TimedNote) ![]u8 {`
+
+## Function Content
+```zig
+    fn collectTracksFast(allocator: std.mem.Allocator, notes: []const TimedNote) ![]u8 {
+        // Use stack array for track collection (max 16 tracks typical)
+        var track_seen = [_]bool{false} ** 16;
+        var track_count: u8 = 0;
+        
+        for (notes) |n| {
+            if (n.track < 16 and !track_seen[n.track]) {
+                track_seen[n.track] = true;
+                track_count += 1;
+            }
+        }
+        
+        const tracks = try allocator.alloc(u8, track_count);
+        var idx: usize = 0;
+        for (0..16) |t| {
+            if (track_seen[t]) {
+                tracks[idx] = @intCast(t);
+                idx += 1;
+            }
+        }
+        
+        return tracks;
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

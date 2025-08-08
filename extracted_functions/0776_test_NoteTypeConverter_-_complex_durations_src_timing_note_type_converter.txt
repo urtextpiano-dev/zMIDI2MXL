@@ -1,0 +1,71 @@
+# Function Analysis: test_NoteTypeConverter_-_complex_durations
+
+## Metadata
+- **File**: `src/timing/note_type_converter.zig`
+- **Lines**: 392-423 (32 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "NoteTypeConverter - complex durations" {`
+
+## Function Content
+```zig
+test "NoteTypeConverter - complex durations" {
+    const allocator = std.testing.allocator;
+    const converter = NoteTypeConverter.init(480);
+    
+    // Test various complex durations
+    const test_cases = [_]u32{ 100, 333, 777, 1111, 2222, 3333 };
+    
+    for (test_cases) |duration| {
+        // Try single note first
+        const single_result = converter.convertDurationToNoteType(duration);
+        
+        // If no single note works, decompose
+        if (single_result == null) {
+            const tied_notes = try converter.decomposeIntoTiedNotes(duration, allocator);
+            defer allocator.free(tied_notes);
+            
+            // Verify total duration
+            var total: u32 = 0;
+            for (tied_notes) |tied_note| {
+                const result = NoteTypeResult{
+                    .note_type = tied_note.note_type,
+                    .dots = tied_note.dots,
+                };
+                total += result.getTotalDuration(480);
+            }
+            
+            // Allow small rounding error for complex durations
+            const diff = if (total > duration) total - duration else duration - total;
+            try std.testing.expect(diff <= duration / 100); // Max 1% error
+        }
+    }
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+NoteTypeConverter - complex durations

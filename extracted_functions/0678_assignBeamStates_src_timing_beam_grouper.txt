@@ -1,0 +1,62 @@
+# Function Analysis: assignBeamStates
+
+## Metadata
+- **File**: `src/timing/beam_grouper.zig`
+- **Lines**: 622-647 (26 lines)
+- **Type**: function
+- **Visibility**: private
+- **Signature**: `fn assignBeamStates(self: *const BeamGrouper, group: *BeamGroup) !void {`
+
+## Function Content
+```zig
+    fn assignBeamStates(self: *const BeamGrouper, group: *BeamGroup) !void {
+        _ = self;
+        if (group.notes.items.len < 2) {
+            // Single note can't be beamed
+            return;
+        }
+        
+        for (group.notes.items, 0..) |*note, i| {
+            // Determine beam levels needed based on note type
+            const beam_levels = getBeamLevels(note.note_type.note_type);
+            
+            for (0..beam_levels) |level| {
+                const beam_state: BeamState = if (i == 0)
+                    .begin
+                else if (i == group.notes.items.len - 1)
+                    .end
+                else
+                    .@"continue";
+                
+                try note.beams.append(.{
+                    .level = @as(u8, @intCast(level + 1)),
+                    .state = beam_state,
+                });
+            }
+        }
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

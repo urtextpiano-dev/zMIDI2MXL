@@ -1,0 +1,54 @@
+# Function Analysis: optimizeRestsWithBeamAwareness
+
+## Metadata
+- **File**: `src/timing/rest_optimizer.zig`
+- **Lines**: 175-192 (18 lines)
+- **Type**: function
+- **Visibility**: public
+- **Signature**: `pub fn optimizeRestsWithBeamAwareness(self: *RestOptimizer, gaps: []const Gap, time_sig: TimeSignature, beam_constraints: ?[]const BeamGroupConstraint) ![]Rest {`
+
+## Function Content
+```zig
+    pub fn optimizeRestsWithBeamAwareness(self: *RestOptimizer, gaps: []const Gap, time_sig: TimeSignature, beam_constraints: ?[]const BeamGroupConstraint) ![]Rest {
+        var result = std.ArrayList(Rest).init(self.allocator);
+        errdefer result.deinit();
+        
+        // Process each gap independently with beam awareness
+        for (gaps) |gap| {
+            const gap_rests = try self.optimizeGapWithBeamAwareness(gap, time_sig, beam_constraints);
+            defer self.allocator.free(gap_rests);
+            
+            try result.appendSlice(gap_rests);
+        }
+        
+        // Consolidate adjacent rests where possible, respecting beam constraints
+        const consolidated = try self.consolidateRestsWithBeamAwareness(result.items, time_sig, beam_constraints);
+        result.deinit();
+        
+        return consolidated;
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

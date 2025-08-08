@@ -1,0 +1,94 @@
+# Function Analysis: test_TASK-INT-012:_beam_group_integrity_validation
+
+## Metadata
+- **File**: `src/educational_processor.zig`
+- **Lines**: 3425-3479 (55 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "TASK-INT-012: beam group integrity validation" {`
+
+## Function Content
+```zig
+test "TASK-INT-012: beam group integrity validation" {
+    var educational_arena = arena_mod.EducationalArena.init(std.testing.allocator, false, false);
+    defer educational_arena.deinit();
+    
+    var processor = EducationalProcessor.init(&educational_arena, .{});
+    
+    // Create a mock beam group for testing with beaming info
+    var test_note1 = enhanced_note.EnhancedTimedNote.init(.{
+        .note = 60, .channel = 0, .velocity = 64, .start_tick = 0, .duration = 240
+    }, &educational_arena);
+    var test_note2 = enhanced_note.EnhancedTimedNote.init(.{
+        .note = 64, .channel = 0, .velocity = 70, .start_tick = 360, .duration = 240
+    }, &educational_arena);
+    
+    // Add beaming info to make them part of a beam group
+    const beaming_info1 = enhanced_note.BeamingInfo{
+        .beam_state = .begin,
+        .beam_level = 1,
+        .can_beam = true,
+        .beat_position = 0.0,
+        .beam_group_id = 1,
+    };
+    const beaming_info2 = enhanced_note.BeamingInfo{
+        .beam_state = .end,
+        .beam_level = 1,
+        .can_beam = true,
+        .beat_position = 1.5,
+        .beam_group_id = 1,
+    };
+    
+    try test_note1.setBeamingInfo(beaming_info1);
+    try test_note2.setBeamingInfo(beaming_info2);
+    
+    const test_notes = [_]enhanced_note.EnhancedTimedNote{test_note1, test_note2};
+    
+    const beam_group = EducationalProcessor.BeamGroupInfo{
+        .group_id = 1,
+        .notes = @constCast(&test_notes),
+        .start_tick = 0,
+        .end_tick = 600,
+    };
+    
+    // Create a rest span that would split the beam group (between the two beamed notes)
+    var splitting_rest = EducationalProcessor.RestSpan{
+        .start_tick = 240,
+        .end_tick = 360,
+        .note_indices = std.ArrayList(usize).init(educational_arena.allocator()),
+        .is_optimized_rest = true,
+    };
+    defer splitting_rest.deinit();
+    
+    // Test beam group integrity validation
+    const integrity_ok = processor.validateBeamGroupIntegrity(beam_group, &[_]EducationalProcessor.RestSpan{splitting_rest});
+    try std.testing.expect(!integrity_ok); // Should fail because rest spans between beamed notes
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+TASK-INT-012: beam group integrity validation

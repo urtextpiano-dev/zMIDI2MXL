@@ -1,0 +1,98 @@
+# Function Analysis: test_VLQ_parsing_-_basic_examples_from_MIDI_spec
+
+## Metadata
+- **File**: `src/midi/parser.zig`
+- **Lines**: 116-174 (59 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "VLQ parsing - basic examples from MIDI spec" {`
+
+## Function Content
+```zig
+test "VLQ parsing - basic examples from MIDI spec" {
+    // Test cases from MIDI_Architecture_Reference.md Section 1.4 lines 107-115
+    
+    // Decimal 0 -> VLQ: 0x00
+    {
+        const data = [_]u8{0x00};
+        const result = try parseVlq(&data);
+        try std.testing.expectEqual(@as(u32, 0), result.value);
+        try std.testing.expectEqual(@as(u8, 1), result.bytes_read);
+    }
+    
+    // Decimal 127 -> VLQ: 0x7F
+    {
+        const data = [_]u8{0x7F};
+        const result = try parseVlq(&data);
+        try std.testing.expectEqual(@as(u32, 127), result.value);
+        try std.testing.expectEqual(@as(u8, 1), result.bytes_read);
+    }
+    
+    // Decimal 128 -> VLQ: 0x81 0x00
+    {
+        const data = [_]u8{0x81, 0x00};
+        const result = try parseVlq(&data);
+        try std.testing.expectEqual(@as(u32, 128), result.value);
+        try std.testing.expectEqual(@as(u8, 2), result.bytes_read);
+    }
+    
+    // Decimal 255 -> VLQ: 0x81 0x7F
+    {
+        const data = [_]u8{0x81, 0x7F};
+        const result = try parseVlq(&data);
+        try std.testing.expectEqual(@as(u32, 255), result.value);
+        try std.testing.expectEqual(@as(u8, 2), result.bytes_read);
+    }
+    
+    // Decimal 8192 -> VLQ: 0xC0 0x00
+    {
+        const data = [_]u8{0xC0, 0x00};
+        const result = try parseVlq(&data);
+        try std.testing.expectEqual(@as(u32, 8192), result.value);
+        try std.testing.expectEqual(@as(u8, 2), result.bytes_read);
+    }
+    
+    // Decimal 16383 -> VLQ: 0xFF 0x7F
+    {
+        const data = [_]u8{0xFF, 0x7F};
+        const result = try parseVlq(&data);
+        try std.testing.expectEqual(@as(u32, 16383), result.value);
+        try std.testing.expectEqual(@as(u8, 2), result.bytes_read);
+    }
+    
+    // Decimal 16384 -> VLQ: 0x81 0x80 0x00
+    {
+        const data = [_]u8{0x81, 0x80, 0x00};
+        const result = try parseVlq(&data);
+        try std.testing.expectEqual(@as(u32, 16384), result.value);
+        try std.testing.expectEqual(@as(u8, 3), result.bytes_read);
+    }
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+VLQ parsing - basic examples from MIDI spec

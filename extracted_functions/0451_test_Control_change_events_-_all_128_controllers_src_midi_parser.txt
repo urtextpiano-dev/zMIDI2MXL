@@ -1,0 +1,75 @@
+# Function Analysis: test_Control_change_events_-_all_128_controllers
+
+## Metadata
+- **File**: `src/midi/parser.zig`
+- **Lines**: 4869-4904 (36 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "Control change events - all 128 controllers" {`
+
+## Function Content
+```zig
+test "Control change events - all 128 controllers" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    
+    const track_data = [_]u8{
+        0x00,                   // Delta time: 0
+        0xB0, 0x00, 0x00,      // Control Change - Controller 0 (Bank Select MSB)
+        0x00,                   // Delta time: 0
+        0xB0, 0x01, 0x40,      // Control Change - Controller 1 (Modulation Wheel)
+        0x00,                   // Delta time: 0
+        0xB0, 0x7F, 0x7F,      // Control Change - Controller 127 (Poly Mode On)
+        0x00,                   // Delta time: 0
+        0xFF, 0x2F, 0x00,      // End of Track
+    };
+    
+    var result = try parseTrackEvents(allocator, &track_data);
+    defer result.deinit(allocator);
+    
+    try std.testing.expectEqual(@as(usize, 3), result.control_change_events.items.len);
+    
+    // Check controller 0 (Bank Select MSB)
+    const cc0 = result.control_change_events.items[0];
+    try std.testing.expectEqual(@as(u7, 0), cc0.controller);
+    try std.testing.expectEqual(@as(u7, 0), cc0.value);
+    
+    // Check controller 1 (Modulation Wheel)
+    const cc1 = result.control_change_events.items[1];
+    try std.testing.expectEqual(@as(u7, 1), cc1.controller);
+    try std.testing.expectEqual(@as(u7, 64), cc1.value);
+    
+    // Check controller 127 (Poly Mode On)
+    const cc127 = result.control_change_events.items[2];
+    try std.testing.expectEqual(@as(u7, 127), cc127.controller);
+    try std.testing.expectEqual(@as(u7, 127), cc127.value);
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+Control change events - all 128 controllers

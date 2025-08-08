@@ -1,0 +1,86 @@
+# Function Analysis: test_Control_change_event_parsing_-_mixed_with_all_event_types
+
+## Metadata
+- **File**: `src/midi/parser.zig`
+- **Lines**: 4378-4424 (47 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "Control change event parsing - mixed with all event types" {`
+
+## Function Content
+```zig
+test "Control change event parsing - mixed with all event types" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    
+    // Track with all types of events we parse
+    const track_data = [_]u8{
+        0x00,                          // Delta time: 0
+        0xFF, 0x51, 0x03,             // Set Tempo
+        0x07, 0xA1, 0x20,             // 500,000 μs = 120 BPM
+        0x00,                          // Delta time: 0
+        0xFF, 0x58, 0x04,             // Time Signature
+        0x04, 0x02, 0x18, 0x08,       // 4/4 time
+        0x00,                          // Delta time: 0
+        0xFF, 0x59, 0x02,             // Key Signature
+        0x00, 0x00,                   // C major
+        0x00,                          // Delta time: 0
+        0xB0, 0x07, 0x64,             // Volume = 100
+        0x00,                          // Delta time: 0
+        0x90, 0x3C, 0x64,             // Note On C4
+        0x00,                          // Delta time: 0
+        0xB0, 0x40, 0x7F,             // Sustain On
+        0x60,                          // Delta time: 96
+        0x80, 0x3C, 0x40,             // Note Off C4
+        0x00,                          // Delta time: 0
+        0xB0, 0x40, 0x00,             // Sustain Off
+        0x00,                          // Delta time: 0
+        0xFF, 0x2F, 0x00,             // End of Track
+    };
+    
+    var result = try parseTrackEvents(allocator, &track_data);
+    defer result.deinit(allocator);
+    
+    // Verify all event types were parsed
+    try std.testing.expectEqual(@as(usize, 1), result.tempo_events.items.len);
+    try std.testing.expectEqual(@as(usize, 1), result.time_signature_events.items.len);
+    try std.testing.expectEqual(@as(usize, 1), result.key_signature_events.items.len);
+    try std.testing.expectEqual(@as(usize, 3), result.control_change_events.items.len);
+    try std.testing.expectEqual(@as(usize, 2), result.note_events.items.len);
+    
+    // Verify control changes
+    try std.testing.expectEqual(@as(u7, 7), result.control_change_events.items[0].controller);   // Volume
+    try std.testing.expectEqual(@as(u7, 64), result.control_change_events.items[1].controller);  // Sustain On
+    try std.testing.expectEqual(@as(u7, 64), result.control_change_events.items[2].controller);  // Sustain Off
+    try std.testing.expectEqual(@as(u7, 127), result.control_change_events.items[1].value);      // On value
+    try std.testing.expectEqual(@as(u7, 0), result.control_change_events.items[2].value);        // Off value
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+Control change event parsing - mixed with all event types

@@ -1,0 +1,97 @@
+# Function Analysis: collectFromAllParts
+
+## Metadata
+- **File**: `src/pipeline.zig`
+- **Lines**: 48-108 (61 lines)
+- **Type**: function
+- **Visibility**: public
+- **Signature**: `pub fn collectFromAllParts(self: *GlobalNoteCollector, container: *const multi_track.MultiTrackContainer) !void {`
+
+## Function Content
+```zig
+    pub fn collectFromAllParts(self: *GlobalNoteCollector, container: *const multi_track.MultiTrackContainer) !void {
+        // DEBUG FIX-002: Add debug tracing within GlobalNoteCollector
+        std.debug.print("DEBUG FIX-002: [COLLECTOR METHOD] - collectFromAllParts called with {} parts, {} tracks\n", .{container.parts.items.len, container.tracks.items.len});
+        
+        // Clear any existing data
+        self.all_notes.clearRetainingCapacity();
+        self.track_to_part_map.clearRetainingCapacity();
+        
+        // Build track-to-part mapping first
+        std.debug.print("DEBUG FIX-002: [MAPPING BUILD] - Building track-to-part mapping\n", .{});
+        for (container.parts.items, 0..) |part, part_idx| {
+            std.debug.print("DEBUG FIX-002: [PART {}] - Part {} has {} track indices\n", .{part_idx, part_idx, part.track_indices.items.len});
+            for (part.track_indices.items) |track_idx| {
+                try self.track_to_part_map.put(@intCast(track_idx), part_idx);
+            }
+        }
+        std.debug.print("DEBUG FIX-002: [MAPPING COMPLETE] - Built mapping for {} track-part associations\n", .{self.track_to_part_map.count()});
+        
+        // Collect all notes from all tracks, preserving track information
+        std.debug.print("DEBUG FIX-002: [NOTE COLLECTION] - Starting note collection from tracks\n", .{});
+        for (container.tracks.items, 0..) |track, track_idx| {
+            std.debug.print("DEBUG FIX-002: [TRACK {}] - Processing track {} with {} note events\n", .{track_idx, track_idx, track.note_events.items.len});
+            
+            // Convert NoteEvents to TimedNotes using the same logic as Pipeline.convertToTimedNotes
+            var duration_tracker = midi_parser.NoteDurationTracker.init(self.allocator);
+            defer duration_tracker.deinit();
+            
+            // Process note events to calculate durations
+            for (track.note_events.items) |event| {
+                try duration_tracker.processNoteEvent(event);
+            }
+            
+            try duration_tracker.finalize();
+            
+            // Get completed notes from the tracker
+            const completed_notes = duration_tracker.completed_notes.items;
+            std.debug.print("DEBUG FIX-002: [TRACK {} NOTES] - Track {} produced {} completed notes\n", .{track_idx, track_idx, completed_notes.len});
+            
+            // Convert to TimedNote format and add to collection
+            for (completed_notes) |note| {
+                const timed_note = timing.TimedNote{
+                    .note = note.note,
+                    .channel = note.channel,
+                    .velocity = note.on_velocity,
+                    .start_tick = note.on_tick,
+                    .duration = note.duration_ticks,
+                    .tied_to_next = false,
+                    .tied_from_previous = false,
+                    .track = @intCast(track_idx),  // Preserve track information
+                };
+                try self.all_notes.append(timed_note);
+            }
+        }
+        
+        std.debug.print("DEBUG FIX-002: [COLLECTION TOTAL] - Collected {} total notes before sorting\n", .{self.all_notes.items.len});
+        
+        // Sort all notes by start_tick for efficient chord detection
+        std.sort.pdq(timing.TimedNote, self.all_notes.items, {}, compareTimedNotesByStartTick);
+        
+        std.debug.print("DEBUG FIX-002: [COLLECTION FINAL] - Final collection: {} notes sorted by start_tick\n", .{self.all_notes.items.len});
+    }
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]

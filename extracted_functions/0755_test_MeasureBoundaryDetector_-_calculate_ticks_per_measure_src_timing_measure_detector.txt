@@ -1,0 +1,80 @@
+# Function Analysis: test_MeasureBoundaryDetector_-_calculate_ticks_per_measure
+
+## Metadata
+- **File**: `src/timing/measure_detector.zig`
+- **Lines**: 375-415 (41 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "MeasureBoundaryDetector - calculate ticks per measure" {`
+
+## Function Content
+```zig
+test "MeasureBoundaryDetector - calculate ticks per measure" {
+    const allocator = std.testing.allocator;
+    const converter = try timing.DivisionConverter.init(480, 480);
+    const detector = MeasureBoundaryDetector.init(allocator, &converter);
+    
+    // Test 4/4 time signature
+    const time_sig_4_4 = midi_parser.TimeSignatureEvent{
+        .tick = 0,
+        .numerator = 4,
+        .denominator_power = 2,  // 2^2 = 4 (quarter note)
+        .clocks_per_metronome = 24,
+        .thirtysecond_notes_per_quarter = 8,
+    };
+    
+    const ticks_4_4 = try detector.calculateTicksPerMeasure(time_sig_4_4);
+    try std.testing.expectEqual(@as(u32, 1920), ticks_4_4); // 4 * 480 = 1920
+    
+    // Test 3/4 time signature
+    const time_sig_3_4 = midi_parser.TimeSignatureEvent{
+        .tick = 0,
+        .numerator = 3,
+        .denominator_power = 2,  // 2^2 = 4 (quarter note)
+        .clocks_per_metronome = 24,
+        .thirtysecond_notes_per_quarter = 8,
+    };
+    
+    const ticks_3_4 = try detector.calculateTicksPerMeasure(time_sig_3_4);
+    try std.testing.expectEqual(@as(u32, 1440), ticks_3_4); // 3 * 480 = 1440
+    
+    // Test 6/8 time signature
+    const time_sig_6_8 = midi_parser.TimeSignatureEvent{
+        .tick = 0,
+        .numerator = 6,
+        .denominator_power = 3,  // 2^3 = 8 (eighth note)
+        .clocks_per_metronome = 24,
+        .thirtysecond_notes_per_quarter = 8,
+    };
+    
+    const ticks_6_8 = try detector.calculateTicksPerMeasure(time_sig_6_8);
+    try std.testing.expectEqual(@as(u32, 1440), ticks_6_8); // 6 * 480 * 4 / 8 = 1440
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+MeasureBoundaryDetector - calculate ticks per measure

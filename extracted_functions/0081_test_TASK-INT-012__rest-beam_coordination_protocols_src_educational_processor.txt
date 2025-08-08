@@ -1,0 +1,84 @@
+# Function Analysis: test_TASK-INT-012:_rest-beam_coordination_protocols
+
+## Metadata
+- **File**: `src/educational_processor.zig`
+- **Lines**: 3349-3393 (45 lines)
+- **Type**: test
+- **Visibility**: private
+- **Signature**: `test "TASK-INT-012: rest-beam coordination protocols" {`
+
+## Function Content
+```zig
+test "TASK-INT-012: rest-beam coordination protocols" {
+    var educational_arena = arena_mod.EducationalArena.init(std.testing.allocator, false, false);
+    defer educational_arena.deinit();
+    
+    // Configure with rest-beam coordination enabled
+    const config = EducationalProcessingConfig{
+        .quality = .{
+            .enable_rest_beam_coordination = true,
+        },
+        .coordination = .{
+            .enable_conflict_resolution = true,
+            .coordination_failure_mode = .fallback,
+        },
+    };
+    
+    var processor = EducationalProcessor.init(&educational_arena, config);
+    
+    // Create test notes with potential rest-beam conflicts
+    const test_notes = [_]measure_detector.TimedNote{
+        .{ .note = 60, .channel = 0, .velocity = 64, .start_tick = 0, .duration = 240 }, // Eighth note
+        .{ .note = 64, .channel = 0, .velocity = 70, .start_tick = 240, .duration = 240 }, // Eighth note
+        .{ .note = 0, .channel = 0, .velocity = 0, .start_tick = 480, .duration = 240 }, // Rest that could split beam
+        .{ .note = 67, .channel = 0, .velocity = 80, .start_tick = 720, .duration = 240 }, // Eighth note
+        .{ .note = 72, .channel = 0, .velocity = 90, .start_tick = 960, .duration = 240 }, // Eighth note
+    };
+    
+    // Process through full chain with rest-beam coordination
+    const enhanced_notes = try processor.processNotes(&test_notes);
+    
+    try std.testing.expect(enhanced_notes.len == 5);
+    
+    // Verify rest-beam coordination was processed
+    const metrics = processor.getMetrics();
+    const coordination_time = metrics.phase_processing_times[@intFromEnum(ProcessingPhase.coordination)];
+    try std.testing.expect(coordination_time > 0);
+    
+    // Verify rest processing was applied with beam awareness
+    for (enhanced_notes) |note| {
+        if (note.base_note.velocity == 0) { // Rest note
+            try std.testing.expect(note.processing_flags.rest_processed);
+        } else { // Regular notes
+            try std.testing.expect(note.processing_flags.beaming_processed);
+        }
+    }
+}
+```
+
+## Analysis Template (To be completed by simplification agent)
+
+### Current Implementation Analysis
+- **Purpose**: [Function's role in MIDI-to-MXL conversion]
+- **Algorithm**: [How the function works]
+- **Complexity**: [Time/space complexity, cyclomatic complexity]
+- **Pipeline Role**: [Where this fits in the conversion pipeline]
+
+### Simplification Opportunity
+- **Proposed Change**: [Specific simplification identified]
+- **Rationale**: [Why this simplification improves the code]
+- **Complexity Reduction**: [Measurable improvement metrics]
+
+### Evidence Package
+- **Functional Proof**: [Demonstration of equivalence]
+- **Performance Data**: [Before/after benchmarks if applicable]
+- **Test Results**: [Validation of correctness]
+- **Risk Assessment**: [Potential issues and mitigations]
+
+### Recommendation
+- **Confidence Level**: [0-100% with justification]
+- **Implementation Priority**: [High/Medium/Low with reasoning]
+- **Prerequisites**: [Dependencies or requirements]
+
+## Test Description
+TASK-INT-012: rest-beam coordination protocols
