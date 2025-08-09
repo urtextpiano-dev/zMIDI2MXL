@@ -1,5 +1,5 @@
 //! Voice Tracking Integration Module
-//! 
+//!
 //! Bridges voice allocation with the interpreter pipeline
 //! Integrates TASK-026 voice allocation with existing timing components
 //!
@@ -21,7 +21,7 @@ pub const VoiceTracker = struct {
     active_notes: [16][voice_allocation.MAX_VOICES]?ActiveNote,
     /// Voice assignment history for continuity
     voice_history: std.ArrayList(VoiceEvent),
-    
+
     const ActiveNote = struct {
         note: u8,
         velocity: u8,
@@ -29,7 +29,7 @@ pub const VoiceTracker = struct {
         channel: u8,
         voice: u8,
     };
-    
+
     const VoiceEvent = struct {
         tick: u32,
         channel: u8,
@@ -37,25 +37,23 @@ pub const VoiceTracker = struct {
         event_type: enum { note_on, note_off },
         note: u8,
     };
-    
+
     /// Initialize a new voice tracker
     pub fn init(allocator: std.mem.Allocator) VoiceTracker {
         return VoiceTracker{
             .allocator = allocator,
             .voice_allocator = voice_allocation.VoiceAllocator.init(allocator),
-            .active_notes = [_][voice_allocation.MAX_VOICES]?ActiveNote{
-                [_]?ActiveNote{null} ** voice_allocation.MAX_VOICES
-            } ** 16,
+            .active_notes = [_][voice_allocation.MAX_VOICES]?ActiveNote{[_]?ActiveNote{null} ** voice_allocation.MAX_VOICES} ** 16,
             .voice_history = std.ArrayList(VoiceEvent).init(allocator),
         };
     }
-    
+
     /// Clean up resources
     pub fn deinit(self: *VoiceTracker) void {
         self.voice_allocator.deinit();
         self.voice_history.deinit();
     }
-    
+
     /// Process a MIDI event and update voice tracking
     pub fn processEvent(self: *VoiceTracker, event: midi_events.Event, tick: u32) !void {
         switch (event) {
@@ -76,15 +74,12 @@ pub const VoiceTracker = struct {
             else => {}, // Other events don't affect voice tracking
         }
     }
-    
+
     /// Handle note on event with voice assignment
     fn handleNoteOn(self: *VoiceTracker, event: midi_events.NoteEvent, tick: u32) !void {
         const channel = event.channel;
-        
-        // Find available voice for this channel
-        var assigned_voice: ?u8 = null;
-        
-        // First, try to find an empty voice slot
+
+        // Try to find an empty voice slot
         for (&self.active_notes[channel], 1..) |*voice_slot, voice_num| {
             if (voice_slot.* == null) {
                 voice_slot.* = ActiveNote{
@@ -92,32 +87,29 @@ pub const VoiceTracker = struct {
                     .velocity = event.velocity,
                     .start_tick = tick,
                     .channel = channel,
-                    .voice = @intCast(voice_num),
+                    .voice = @intCast(voice_num), // preserve 1-based voice numbering
                 };
-                assigned_voice = @intCast(voice_num);
-                break;
+
+                // Record voice event and return immediately
+                try self.voice_history.append(.{
+                    .tick = tick,
+                    .channel = channel,
+                    .voice = @intCast(voice_num),
+                    .event_type = .note_on,
+                    .note = event.note,
+                });
+                return;
             }
         }
-        
-        // If no empty slot, we have too many simultaneous notes
-        if (assigned_voice == null) {
-            return voice_allocation.VoiceAllocationError.TooManySimultaneousNotes;
-        }
-        
-        // Record voice event
-        try self.voice_history.append(.{
-            .tick = tick,
-            .channel = channel,
-            .voice = assigned_voice.?,
-            .event_type = .note_on,
-            .note = event.note,
-        });
+
+        // No empty slot available
+        return voice_allocation.VoiceAllocationError.TooManySimultaneousNotes;
     }
-    
+
     /// Handle note off event
     fn handleNoteOff(self: *VoiceTracker, event: midi_events.NoteEvent, tick: u32) !void {
         const channel = event.channel;
-        
+
         // Find the voice playing this note
         for (&self.active_notes[channel], 1..) |*voice_slot, voice_num| {
             if (voice_slot.*) |active_note| {
@@ -130,7 +122,7 @@ pub const VoiceTracker = struct {
                         .event_type = .note_off,
                         .note = event.note,
                     });
-                    
+
                     // Clear the voice slot
                     voice_slot.* = null;
                     break;
@@ -138,83 +130,84 @@ pub const VoiceTracker = struct {
             }
         }
     }
-    
+
     /// Get completed notes with voice assignments for a channel
     pub fn getCompletedNotes(self: *VoiceTracker, channel: u8) ![]voice_allocation.VoicedNote {
         var notes = std.ArrayList(timing.TimedNote).init(self.allocator);
         defer notes.deinit();
-        
-        // Build notes from voice history
-        var note_starts = std.AutoHashMap(u8, VoiceEvent).init(self.allocator);
-        defer note_starts.deinit();
-        
+
+        // Track start events per MIDI note (0..127)
+        var note_starts: [128]?VoiceEvent = [_]?VoiceEvent{null} ** 128;
+
         for (self.voice_history.items) |event| {
             if (event.channel != channel) continue;
-            
+
             switch (event.event_type) {
                 .note_on => {
-                    try note_starts.put(event.note, event);
+                    const idx: usize = @intCast(event.note);
+                    note_starts[idx] = event;
                 },
                 .note_off => {
-                    if (note_starts.get(event.note)) |start_event| {
+                    const idx: usize = @intCast(event.note);
+                    if (note_starts[idx]) |start_event| {
                         const duration = event.tick - start_event.tick;
                         if (duration > 0) {
                             try notes.append(.{
                                 .note = event.note,
                                 .channel = channel,
-                                .velocity = 64, // Default, should track from note_on
+                                .velocity = 64, // velocity not tracked in history yet
                                 .start_tick = start_event.tick,
                                 .duration = duration,
                                 .tied_to_next = false,
                                 .tied_from_previous = false,
                             });
                         }
-                        _ = note_starts.remove(event.note);
+                        note_starts[idx] = null;
                     }
                 },
             }
         }
-        
-        // Use voice allocator to assign voices
+
         return self.voice_allocator.assignVoices(notes.items);
     }
-    
+
     /// Process notes that have already been timed and possibly split at measure boundaries
     pub fn processTimedNotes(self: *VoiceTracker, measures: []const timing.Measure) ![]voice_allocation.VoicedNote {
         return self.voice_allocator.assignVoicesInMeasures(measures);
     }
-    
+
     /// Get voice allocation statistics
     pub fn getStatistics(self: *const VoiceTracker) voice_allocation.VoiceStatistics {
         return self.voice_allocator.getStatistics();
     }
-    
+
     /// Clear all tracking state
     pub fn reset(self: *VoiceTracker) void {
-        // Clear active notes
+        // Clear active notes (one pass per channel)
         for (&self.active_notes) |*channel_voices| {
-            for (channel_voices) |*voice| {
-                voice.* = null;
-            }
+            // channel_voices: *[voice_allocation.MAX_VOICES]?ActiveNote
+            std.mem.set(?ActiveNote, channel_voices.*[0..], null);
         }
-        
-        // Clear history
+
+        // Clear history but keep capacity
         self.voice_history.clearRetainingCapacity();
-        
-        // Reset voice allocator
+
+        // Reset voice allocator (use struct literal so new fields default sanely)
         for (&self.voice_allocator.voices) |*voice| {
-            voice.last_end_tick = 0;
-            voice.note_count = 0;
+            voice.* = .{
+                .last_end_tick = 0,
+                .note_count = 0,
+            };
         }
     }
 };
 
 test "voice tracker basic functionality" {
     const allocator = std.testing.allocator;
-    
+
     var tracker = VoiceTracker.init(allocator);
     defer tracker.deinit();
-    
+
     // Simulate some MIDI events
     const note_on_60 = midi_events.Event{
         .note_on = .{
@@ -224,7 +217,7 @@ test "voice tracker basic functionality" {
             .delta_time = 0,
         },
     };
-    
+
     const note_on_64 = midi_events.Event{
         .note_on = .{
             .channel = 0,
@@ -233,7 +226,7 @@ test "voice tracker basic functionality" {
             .delta_time = 240,
         },
     };
-    
+
     const note_off_60 = midi_events.Event{
         .note_off = .{
             .channel = 0,
@@ -242,7 +235,7 @@ test "voice tracker basic functionality" {
             .delta_time = 240,
         },
     };
-    
+
     const note_off_64 = midi_events.Event{
         .note_off = .{
             .channel = 0,
@@ -251,30 +244,30 @@ test "voice tracker basic functionality" {
             .delta_time = 480,
         },
     };
-    
+
     // Process events
     try tracker.processEvent(note_on_60, 0);
     try tracker.processEvent(note_on_64, 240);
     try tracker.processEvent(note_off_60, 480);
     try tracker.processEvent(note_off_64, 960);
-    
+
     // Verify active notes during overlap
     try std.testing.expect(tracker.active_notes[0][0] != null);
     try std.testing.expect(tracker.active_notes[0][1] != null);
-    
+
     // Get completed notes
     const voiced_notes = try tracker.getCompletedNotes(0);
     defer allocator.free(voiced_notes);
-    
+
     try std.testing.expectEqual(@as(usize, 2), voiced_notes.len);
 }
 
 test "voice tracker with measure integration" {
     const allocator = std.testing.allocator;
-    
+
     var tracker = VoiceTracker.init(allocator);
     defer tracker.deinit();
-    
+
     // Create test measures with notes
     var measures = [_]timing.Measure{
         timing.Measure.init(allocator, 1, 0, 1920, .{
@@ -285,7 +278,7 @@ test "voice tracker with measure integration" {
         }),
     };
     defer measures[0].deinit();
-    
+
     // Add some notes to the measure
     try measures[0].addNote(.{
         .note = 60,
@@ -296,7 +289,7 @@ test "voice tracker with measure integration" {
         .tied_to_next = false,
         .tied_from_previous = false,
     });
-    
+
     try measures[0].addNote(.{
         .note = 64,
         .channel = 0,
@@ -306,11 +299,11 @@ test "voice tracker with measure integration" {
         .tied_to_next = false,
         .tied_from_previous = false,
     });
-    
+
     // Process timed notes
     const voiced_notes = try tracker.processTimedNotes(&measures);
     defer allocator.free(voiced_notes);
-    
+
     try std.testing.expectEqual(@as(usize, 2), voiced_notes.len);
     // First note should be voice 1
     try std.testing.expectEqual(@as(u8, 1), voiced_notes[0].voice);
