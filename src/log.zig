@@ -5,19 +5,14 @@ const std = @import("std");
 
 // Log levels matching the specification
 pub const LogLevel = enum(u8) {
-    trace = 0,  // Byte-level operations
-    debug = 1,  // Event parsing details
-    info = 2,   // High-level operations
-    warn = 3,   // Recoverable issues
-    err = 4,    // Serious problems
-    
+    trace = 0, // Byte-level operations
+    debug = 1, // Event parsing details
+    info = 2, // High-level operations
+    warn = 3, // Recoverable issues
+    err = 4, // Serious problems
+
     pub fn fromString(str: []const u8) ?LogLevel {
-        if (std.mem.eql(u8, str, "trace")) return .trace;
-        if (std.mem.eql(u8, str, "debug")) return .debug;
-        if (std.mem.eql(u8, str, "info")) return .info;
-        if (std.mem.eql(u8, str, "warn")) return .warn;
-        if (std.mem.eql(u8, str, "err")) return .err;
-        return null;
+        return std.meta.stringToEnum(LogLevel, str);
     }
 };
 
@@ -33,19 +28,19 @@ pub const LogConfig = struct {
 pub const Logger = struct {
     config: LogConfig,
     mutex: std.Thread.Mutex,
-    
+
     pub fn init(config: LogConfig) Logger {
         return .{
             .config = config,
             .mutex = std.Thread.Mutex{},
         };
     }
-    
+
     // Check if a log level is enabled
     pub fn isEnabled(self: *const Logger, level: LogLevel) bool {
         return @intFromEnum(level) >= @intFromEnum(self.config.level);
     }
-    
+
     // Core logging function
     pub fn log(
         self: *Logger,
@@ -54,16 +49,16 @@ pub const Logger = struct {
         args: anytype,
     ) void {
         if (!self.isEnabled(level)) return;
-        
+
         self.mutex.lock();
         defer self.mutex.unlock();
-        
+
         // Build the log message
         if (self.config.show_timestamp) {
             const timestamp = std.time.milliTimestamp();
             self.config.writer.print("[{d}] ", .{timestamp}) catch return;
         }
-        
+
         // Log level
         const level_str = switch (level) {
             .trace => "TRACE",
@@ -73,33 +68,33 @@ pub const Logger = struct {
             .err => "ERROR",
         };
         self.config.writer.print("[{s}] ", .{level_str}) catch return;
-        
+
         // Actual message
         self.config.writer.print(format, args) catch return;
         self.config.writer.writeAll("\n") catch return;
     }
-    
+
     // Convenience methods for each log level
     pub fn trace(self: *Logger, comptime format: []const u8, args: anytype) void {
         self.log(.trace, format, args);
     }
-    
+
     pub fn debug(self: *Logger, comptime format: []const u8, args: anytype) void {
         self.log(.debug, format, args);
     }
-    
+
     pub fn info(self: *Logger, comptime format: []const u8, args: anytype) void {
         self.log(.info, format, args);
     }
-    
+
     pub fn warn(self: *Logger, comptime format: []const u8, args: anytype) void {
         self.log(.warn, format, args);
     }
-    
+
     pub fn err(self: *Logger, comptime format: []const u8, args: anytype) void {
         self.log(.err, format, args);
     }
-    
+
     // Log an event with location information
     pub fn logEvent(
         self: *Logger,
@@ -110,55 +105,48 @@ pub const Logger = struct {
         args: anytype,
     ) void {
         if (!self.isEnabled(level)) return;
-        
-        // Build location string if enabled
-        if (self.config.show_location and (track != null or tick != null)) {
-            var location_buf: [64]u8 = undefined;
-            var stream = std.io.fixedBufferStream(&location_buf);
-            const writer = stream.writer();
-            
-            writer.writeAll("Track ") catch return;
-            if (track) |t| {
-                writer.print("{d}", .{t}) catch return;
-            } else {
-                writer.writeAll("?") catch return;
-            }
-            
-            writer.writeAll(" @ tick ") catch return;
-            if (tick) |t| {
-                writer.print("{d}", .{t}) catch return;
-            } else {
-                writer.writeAll("?") catch return;
-            }
-            
-            const location = stream.getWritten();
-            
-            // Build the full message and log it in one call to avoid deadlock
-            self.mutex.lock();
-            defer self.mutex.unlock();
-            
-            // Build the log message with location prefix
-            if (self.config.show_timestamp) {
-                const timestamp = std.time.milliTimestamp();
-                self.config.writer.print("[{d}] ", .{timestamp}) catch return;
-            }
-            
-            // Log level
-            const level_str = switch (level) {
-                .trace => "TRACE",
-                .debug => "DEBUG",
-                .info => "INFO ",
-                .warn => "WARN ",
-                .err => "ERROR",
-            };
-            self.config.writer.print("[{s}] [{s}] ", .{ level_str, location }) catch return;
-            
-            // Actual message
-            self.config.writer.print(format, args) catch return;
-            self.config.writer.writeAll("\n") catch return;
-        } else {
+
+        const need_location = self.config.show_location and (track != null or tick != null);
+        if (!need_location) {
             self.log(level, format, args);
+            return;
         }
+
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        if (self.config.show_timestamp) {
+            const timestamp = std.time.milliTimestamp();
+            self.config.writer.print("[{d}] ", .{timestamp}) catch return;
+        }
+
+        const level_str = switch (level) {
+            .trace => "TRACE",
+            .debug => "DEBUG",
+            .info => "INFO ",
+            .warn => "WARN ",
+            .err => "ERROR",
+        };
+        self.config.writer.print("[{s}] [", .{level_str}) catch return;
+
+        self.config.writer.writeAll("Track ") catch return;
+        if (track) |t| {
+            self.config.writer.print("{d}", .{t}) catch return;
+        } else {
+            self.config.writer.writeAll("?") catch return;
+        }
+
+        self.config.writer.writeAll(" @ tick ") catch return;
+        if (tick) |k| {
+            self.config.writer.print("{d}", .{k}) catch return;
+        } else {
+            self.config.writer.writeAll("?") catch return;
+        }
+
+        self.config.writer.writeAll("] ") catch return;
+
+        self.config.writer.print(format, args) catch return;
+        self.config.writer.writeAll("\n") catch return;
     }
 };
 
@@ -170,19 +158,24 @@ var global_mutex = std.Thread.Mutex{};
 pub fn initGlobalLogger(config: LogConfig) void {
     global_mutex.lock();
     defer global_mutex.unlock();
-    
-    global_logger = Logger.init(config);
+
+    if (global_logger == null) {
+        global_logger = Logger.init(config);
+    } else {
+        // Safer: keep the existing mutex, only update configuration
+        global_logger.?.config = config;
+    }
 }
 
 // Get the global logger
 pub fn getLogger() *Logger {
     global_mutex.lock();
     defer global_mutex.unlock();
-    
+
     if (global_logger == null) {
         global_logger = Logger.init(.{});
     }
-    
+
     return &global_logger.?;
 }
 
@@ -198,7 +191,7 @@ test "LogLevel parsing" {
 
 test "Logger level filtering" {
     var logger = Logger.init(.{ .level = .warn });
-    
+
     try std.testing.expect(!logger.isEnabled(.trace));
     try std.testing.expect(!logger.isEnabled(.debug));
     try std.testing.expect(!logger.isEnabled(.info));
@@ -210,23 +203,23 @@ test "Logger basic functionality" {
     // Create a test buffer to capture output
     var buffer: [1024]u8 = undefined;
     var stream = std.io.fixedBufferStream(&buffer);
-    
+
     var logger = Logger.init(.{
         .level = .debug,
         .show_timestamp = false,
         .show_location = true,
         .writer = stream.writer().any(),
     });
-    
+
     // Test different log levels
     logger.trace("This should not appear", .{});
     logger.debug("Debug message: {d}", .{42});
     logger.info("Info message", .{});
     logger.warn("Warning: {s}", .{"test warning"});
     logger.err("Error occurred", .{});
-    
+
     const output = stream.getWritten();
-    
+
     // Verify output contains expected messages
     try std.testing.expect(std.mem.indexOf(u8, output, "This should not appear") == null);
     try std.testing.expect(std.mem.indexOf(u8, output, "[DEBUG] Debug message: 42") != null);
@@ -238,16 +231,16 @@ test "Logger basic functionality" {
 test "Logger event logging" {
     var buffer: [512]u8 = undefined;
     var stream = std.io.fixedBufferStream(&buffer);
-    
+
     var logger = Logger.init(.{
         .level = .debug,
         .show_timestamp = false,
         .show_location = true,
         .writer = stream.writer().any(),
     });
-    
+
     logger.logEvent(.debug, 2, 96, "Note On C4", .{});
-    
+
     const output = stream.getWritten();
     try std.testing.expect(std.mem.indexOf(u8, output, "[Track 2 @ tick 96] Note On C4") != null);
 }

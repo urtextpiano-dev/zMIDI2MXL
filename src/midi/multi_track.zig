@@ -11,18 +11,18 @@ const error_mod = @import("../error.zig");
 
 /// Track information for multi-track MIDI files
 pub const TrackInfo = struct {
-    track_index: u16,                    // Original MIDI track index (0-based)
-    track_name: ?[]const u8,             // Track name from meta events (if any)
-    instrument_name: ?[]const u8,        // Instrument name from meta events
-    channel_mask: u16,                   // Bitmask of channels used in this track
-    note_count: u32,                     // Number of note events in track
-    has_percussion: bool,                // True if track uses channel 9 (drums)
-    
+    track_index: u16, // Original MIDI track index (0-based)
+    track_name: ?[]const u8, // Track name from meta events (if any)
+    instrument_name: ?[]const u8, // Instrument name from meta events
+    channel_mask: u16, // Bitmask of channels used in this track
+    note_count: u32, // Number of note events in track
+    has_percussion: bool, // True if track uses channel 9 (drums)
+
     /// Check if track uses a specific MIDI channel
     pub fn usesChannel(self: TrackInfo, channel: u4) bool {
         return (self.channel_mask & (@as(u16, 1) << channel)) != 0;
     }
-    
+
     /// Add a channel to the track's channel mask
     pub fn addChannel(self: *TrackInfo, channel: u4) void {
         self.channel_mask |= @as(u16, 1) << channel;
@@ -30,7 +30,7 @@ pub const TrackInfo = struct {
             self.has_percussion = true;
         }
     }
-    
+
     /// Get count of unique channels used
     pub fn getChannelCount(self: TrackInfo) u8 {
         return @popCount(self.channel_mask);
@@ -39,18 +39,18 @@ pub const TrackInfo = struct {
 
 /// Part information for MusicXML generation
 pub const PartInfo = struct {
-    part_id: []const u8,                 // MusicXML part ID (e.g., "P1", "P2")
-    part_name: []const u8,               // Display name for the part
-    part_abbreviation: ?[]const u8,      // Abbreviated name (optional)
-    midi_channel: ?u4,                   // Primary MIDI channel (if single channel)
-    midi_program: ?u8,                   // MIDI program number (if set)
-    track_indices: std.ArrayList(u16),   // Source MIDI track indices
-    is_percussion: bool,                 // True for percussion parts
-    
+    part_id: []const u8, // MusicXML part ID (e.g., "P1", "P2")
+    part_name: []const u8, // Display name for the part
+    part_abbreviation: ?[]const u8, // Abbreviated name (optional)
+    midi_channel: ?u4, // Primary MIDI channel (if single channel)
+    midi_program: ?u8, // MIDI program number (if set)
+    track_indices: std.ArrayList(u16), // Source MIDI track indices
+    is_percussion: bool, // True for percussion parts
+
     pub fn init(allocator: std.mem.Allocator, id: []const u8, name: []const u8) !PartInfo {
         const id_copy = try allocator.dupe(u8, id);
         const name_copy = try allocator.dupe(u8, name);
-        
+
         return PartInfo{
             .part_id = id_copy,
             .part_name = name_copy,
@@ -61,7 +61,7 @@ pub const PartInfo = struct {
             .is_percussion = false,
         };
     }
-    
+
     pub fn deinit(self: *PartInfo, allocator: std.mem.Allocator) void {
         allocator.free(self.part_id);
         allocator.free(self.part_name);
@@ -70,7 +70,7 @@ pub const PartInfo = struct {
         }
         self.track_indices.deinit();
     }
-    
+
     /// Add a track to this part
     pub fn addTrack(self: *PartInfo, track_index: u16) !void {
         try self.track_indices.append(track_index);
@@ -85,7 +85,7 @@ pub const MultiTrackContainer = struct {
     parts: std.ArrayList(PartInfo),
     format: parser.MidiFormat,
     division: u16,
-    
+
     pub fn init(allocator: std.mem.Allocator, format: parser.MidiFormat, division: u16) MultiTrackContainer {
         return .{
             .allocator = allocator,
@@ -96,14 +96,14 @@ pub const MultiTrackContainer = struct {
             .division = division,
         };
     }
-    
+
     pub fn deinit(self: *MultiTrackContainer) void {
         // Deinit all tracks
         for (self.tracks.items) |*track| {
             track.deinit(self.allocator);
         }
         self.tracks.deinit();
-        
+
         // Free track info strings
         for (self.track_info.items) |*info| {
             if (info.track_name) |name| {
@@ -114,30 +114,38 @@ pub const MultiTrackContainer = struct {
             }
         }
         self.track_info.deinit();
-        
+
         // Deinit all parts
         for (self.parts.items) |*part| {
             part.deinit(self.allocator);
         }
         self.parts.deinit();
     }
-    
+
     /// Add a parsed track to the container
     pub fn addTrack(self: *MultiTrackContainer, track: parser.TrackParseResult) !void {
-        const track_index = self.tracks.items.len;
+        // Append the track first; index is len-1 afterwards.
         try self.tracks.append(track);
-        
-        // Create track info
+        const track_index: u16 = @intCast(self.tracks.items.len - 1);
+
+        // Prepare TrackInfo; no owned strings yet.
         var info = TrackInfo{
-            .track_index = @intCast(track_index),
+            .track_index = track_index,
             .track_name = null,
             .instrument_name = null,
             .channel_mask = 0,
             .note_count = @intCast(track.note_events.items.len),
             .has_percussion = false,
         };
-        
-        // Extract track name from text events
+
+        // If anything fails after duping strings but before a successful append,
+        // make sure we don't leak them.
+        errdefer {
+            if (info.track_name) |name| self.allocator.free(name);
+            if (info.instrument_name) |name| self.allocator.free(name);
+        }
+
+        // Extract the first occurrence of each name (as in your original).
         for (track.text_events.items) |text_event| {
             if (text_event.event_type == @intFromEnum(parser.TextEvent.TextType.track_name) and info.track_name == null) {
                 info.track_name = try self.allocator.dupe(u8, text_event.text);
@@ -145,15 +153,16 @@ pub const MultiTrackContainer = struct {
                 info.instrument_name = try self.allocator.dupe(u8, text_event.text);
             }
         }
-        
-        // Analyze channel usage
+
+        // Analyze channel usage (your existing logic).
         for (track.note_events.items) |note_event| {
             info.addChannel(note_event.channel);
         }
-        
+
+        // Ownership of strings transfers on success; errdefer will not run.
         try self.track_info.append(info);
     }
-    
+
     /// Create parts from tracks based on the MIDI format
     /// Implements the track-to-part mapping logic
     pub fn createParts(self: *MultiTrackContainer) !void {
@@ -162,7 +171,7 @@ pub const MultiTrackContainer = struct {
             part.deinit(self.allocator);
         }
         self.parts.clearRetainingCapacity();
-        
+
         switch (self.format) {
             .single_track => {
                 // Format 0: Create parts based on channels
@@ -178,7 +187,7 @@ pub const MultiTrackContainer = struct {
             },
         }
     }
-    
+
     /// Create parts based on MIDI channels (for Format 0)
     fn createPartsFromChannels(self: *MultiTrackContainer) !void {
         // Collect all unique channels across all tracks
@@ -186,7 +195,7 @@ pub const MultiTrackContainer = struct {
         for (self.track_info.items) |info| {
             channel_mask |= info.channel_mask;
         }
-        
+
         // Create a part for each used channel
         var part_number: u8 = 1;
         for (0..16) |ch| {
@@ -194,30 +203,32 @@ pub const MultiTrackContainer = struct {
             if ((channel_mask & (@as(u16, 1) << channel)) != 0) {
                 var part_id_buf: [8]u8 = undefined;
                 const part_id = try std.fmt.bufPrint(&part_id_buf, "P{d}", .{part_number});
-                
+
                 var part_name_buf: [32]u8 = undefined;
                 const part_name = if (channel == 9)
                     try std.fmt.bufPrint(&part_name_buf, "Percussion", .{})
                 else
                     try std.fmt.bufPrint(&part_name_buf, "Part {d}", .{part_number});
-                
+
                 var part = try PartInfo.init(self.allocator, part_id, part_name);
+                errdefer part.deinit(self.allocator); // prevent leak on later failure
+
                 part.midi_channel = channel;
                 part.is_percussion = (channel == 9);
-                
+
                 // Add all tracks that use this channel
                 for (self.track_info.items, 0..) |info, track_idx| {
                     if (info.usesChannel(channel)) {
                         try part.addTrack(@intCast(track_idx));
                     }
                 }
-                
-                try self.parts.append(part);
+
+                try self.parts.append(part); // ownership transferred; errdefer no longer applies
                 part_number += 1;
             }
         }
     }
-    
+
     /// Create parts based on tracks (for Format 1 and 2)
     fn createPartsFromTracks(self: *MultiTrackContainer) !void {
         for (self.track_info.items, 0..) |info, idx| {
@@ -225,10 +236,10 @@ pub const MultiTrackContainer = struct {
             if (self.format == .multi_track_sync and idx == 0 and info.note_count == 0) {
                 continue;
             }
-            
+
             var part_id_buf: [8]u8 = undefined;
             const part_id = try std.fmt.bufPrint(&part_id_buf, "P{d}", .{self.parts.items.len + 1});
-            
+
             // Use track name if available, otherwise generate default name
             const part_name = if (info.track_name) |name|
                 name
@@ -241,10 +252,12 @@ pub const MultiTrackContainer = struct {
                 var name_buf: [32]u8 = undefined;
                 break :blk try std.fmt.bufPrint(&name_buf, "Track {d}", .{idx + 1});
             };
-            
+
             var part = try PartInfo.init(self.allocator, part_id, part_name);
+            errdefer part.deinit(self.allocator); // prevent leak on later failure
+
             part.is_percussion = info.has_percussion;
-            
+
             // Set primary channel if track uses only one channel
             if (info.getChannelCount() == 1) {
                 // Find the single channel
@@ -255,12 +268,12 @@ pub const MultiTrackContainer = struct {
                     }
                 }
             }
-            
+
             try part.addTrack(@intCast(idx));
-            try self.parts.append(part);
+            try self.parts.append(part); // transfer ownership
         }
     }
-    
+
     /// Get total number of note events across all tracks
     pub fn getTotalNoteCount(self: *const MultiTrackContainer) u32 {
         var total: u32 = 0;
@@ -269,20 +282,21 @@ pub const MultiTrackContainer = struct {
         }
         return total;
     }
-    
+
     /// Get notes for a specific part
     pub fn getNotesForPart(self: *const MultiTrackContainer, part_index: usize) !std.ArrayList(parser.NoteEvent) {
         if (part_index >= self.parts.items.len) {
             return error_mod.MidiError.InvalidEventData;
         }
-        
+
         const part = &self.parts.items[part_index];
         var notes = std.ArrayList(parser.NoteEvent).init(self.allocator);
-        
+        errdefer notes.deinit(); // ensure no leak on any later error
+
         // Collect notes from all tracks in this part
         for (part.track_indices.items) |track_idx| {
             const track = &self.tracks.items[track_idx];
-            
+
             // Filter notes by channel if part has a specific channel
             if (part.midi_channel) |channel| {
                 for (track.note_events.items) |note| {
@@ -295,36 +309,37 @@ pub const MultiTrackContainer = struct {
                 try notes.appendSlice(track.note_events.items);
             }
         }
-        
+
         // Sort notes by tick position for proper ordering
         std.sort.pdq(parser.NoteEvent, notes.items, {}, compareNotesByTick);
-        
-        return notes;
+
+        return notes; // caller owns and must deinit on success
     }
-    
+
     /// Get all tempo events from all tracks, sorted by tick position
     /// Implements TASK-2.1 per MIDI_Architecture_Reference.md tempo event extraction
     pub fn getAllTempoEvents(self: *const MultiTrackContainer) !std.ArrayList(parser.TempoEvent) {
         var tempo_events = std.ArrayList(parser.TempoEvent).init(self.allocator);
-        
+        errdefer tempo_events.deinit(); // prevent leak if any append fails
+
         // Collect tempo events from all tracks
         for (self.tracks.items) |*track| {
             try tempo_events.appendSlice(track.tempo_events.items);
         }
-        
+
         // Sort by tick position for proper temporal ordering
         std.sort.pdq(parser.TempoEvent, tempo_events.items, {}, compareTempoEventsByTick);
-        
-        return tempo_events;
+
+        return tempo_events; // caller owns and must deinit on success
     }
-    
+
     /// Get the effective tempo at the start of the MIDI file
     /// Returns the first tempo event or default 120 BPM if none found
     /// Implements TASK-2.1 per MIDI_Architecture_Reference.md tempo extraction
     pub fn getInitialTempo(self: *const MultiTrackContainer) f64 {
         // Find the earliest tempo event across all tracks
         var earliest_tempo: ?parser.TempoEvent = null;
-        
+
         for (self.tracks.items) |*track| {
             for (track.tempo_events.items) |tempo_event| {
                 if (earliest_tempo == null or tempo_event.tick < earliest_tempo.?.tick) {
@@ -332,7 +347,7 @@ pub const MultiTrackContainer = struct {
                 }
             }
         }
-        
+
         if (earliest_tempo) |tempo| {
             return tempo.toBPM();
         } else {
@@ -365,17 +380,17 @@ test "TrackInfo channel operations" {
         .note_count = 0,
         .has_percussion = false,
     };
-    
+
     // Test adding channels
     info.addChannel(0);
     info.addChannel(4);
     info.addChannel(9); // Percussion channel
-    
+
     try std.testing.expect(info.usesChannel(0));
     try std.testing.expect(info.usesChannel(4));
     try std.testing.expect(info.usesChannel(9));
     try std.testing.expect(!info.usesChannel(1));
-    
+
     try std.testing.expect(info.has_percussion);
     try std.testing.expectEqual(@as(u8, 3), info.getChannelCount());
 }
@@ -384,7 +399,7 @@ test "MultiTrackContainer basic operations" {
     const allocator = std.testing.allocator;
     var container = MultiTrackContainer.init(allocator, .multi_track_sync, 480);
     defer container.deinit();
-    
+
     // Create a dummy track
     var track = parser.TrackParseResult{
         .note_events = std.ArrayList(parser.NoteEvent).init(allocator),
@@ -403,7 +418,7 @@ test "MultiTrackContainer basic operations" {
         .events_parsed = 10,
         .events_skipped = 0,
     };
-    
+
     // Add some note events
     try track.note_events.append(.{
         .event_type = .note_on,
@@ -412,9 +427,9 @@ test "MultiTrackContainer basic operations" {
         .velocity = 64,
         .tick = 0,
     });
-    
+
     try container.addTrack(track);
-    
+
     try std.testing.expectEqual(@as(usize, 1), container.tracks.items.len);
     try std.testing.expectEqual(@as(usize, 1), container.track_info.items.len);
     try std.testing.expectEqual(@as(u32, 1), container.track_info.items[0].note_count);
@@ -424,7 +439,7 @@ test "Multi-track part creation - Format 1" {
     const allocator = std.testing.allocator;
     var container = MultiTrackContainer.init(allocator, .multi_track_sync, 480);
     defer container.deinit();
-    
+
     // Add conductor track (no notes)
     const conductor_track = parser.TrackParseResult{
         .note_events = std.ArrayList(parser.NoteEvent).init(allocator),
@@ -443,9 +458,9 @@ test "Multi-track part creation - Format 1" {
         .events_parsed = 5,
         .events_skipped = 0,
     };
-    
+
     try container.addTrack(conductor_track);
-    
+
     // Add instrument tracks
     for (0..2) |i| {
         var track = parser.TrackParseResult{
@@ -465,7 +480,7 @@ test "Multi-track part creation - Format 1" {
             .events_parsed = 20,
             .events_skipped = 0,
         };
-        
+
         // Add notes on different channels
         try track.note_events.append(.{
             .event_type = .note_on,
@@ -474,16 +489,16 @@ test "Multi-track part creation - Format 1" {
             .velocity = 64,
             .tick = 0,
         });
-        
+
         try container.addTrack(track);
     }
-    
+
     // Create parts
     try container.createParts();
-    
+
     // Should have 2 parts (conductor track excluded)
     try std.testing.expectEqual(@as(usize, 2), container.parts.items.len);
-    
+
     // Check part IDs
     try std.testing.expectEqualStrings("P1", container.parts.items[0].part_id);
     try std.testing.expectEqualStrings("P2", container.parts.items[1].part_id);

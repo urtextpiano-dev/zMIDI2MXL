@@ -41,18 +41,7 @@ pub const NoteType = enum {
     @"256th",
 
     pub fn toString(self: NoteType) []const u8 {
-        return switch (self) {
-            .breve => "breve",
-            .whole => "whole",
-            .half => "half",
-            .quarter => "quarter",
-            .eighth => "eighth",
-            .@"16th" => "16th",
-            .@"32nd" => "32nd",
-            .@"64th" => "64th",
-            .@"128th" => "128th",
-            .@"256th" => "256th",
-        };
+        return @tagName(self);
     }
 };
 
@@ -79,12 +68,10 @@ pub fn midiToPitch(midi_note: u8) Pitch {
 /// Calculate note type from duration in divisions
 /// Implements TASK-009 per MXL_Architecture_Reference.md Section 4.1 lines 366-383
 pub fn durationToNoteType(duration: u32, divisions_per_quarter: u32) NoteType {
-    // Calculate duration as fraction of whole note
-    // Whole note = 4 quarter notes = 4 * divisions_per_quarter
+    // Whole note = 4 quarter notes
     const whole_note_duration = divisions_per_quarter * 4;
 
-    // Find the closest standard note type
-    // Using simple ratios for now, dots and tuplets will be handled in later tasks
+    // Using simple ratios for now; dots/tuplets handled elsewhere
     if (duration >= whole_note_duration * 2) {
         return .breve;
     } else if (duration >= whole_note_duration) {
@@ -113,21 +100,26 @@ pub fn durationToNoteType(duration: u32, divisions_per_quarter: u32) NoteType {
 const MeasureState = struct {
     current_duration: u32 = 0,
     measure_number: u32 = 1,
-    max_duration: u32, // beats * beat_type * divisions / 4
+    /// max_duration = beats * beat_type * divisions / 4
+    max_duration: u32,
 
     pub fn init(beats: u8, beat_type: u8, divisions: u32) MeasureState {
         // For 4/4 time: 4 * 4 * 480 / 4 = 1920 duration units
         const max_duration = @as(u32, beats) * @as(u32, beat_type) * divisions / 4;
-        return MeasureState{
-            .max_duration = max_duration,
-        };
+        return MeasureState{ .max_duration = max_duration };
     }
 
+    /// Overflow-safe capacity check
     pub fn canAddNote(self: *const MeasureState, note_duration: u32) bool {
-        return self.current_duration + note_duration <= self.max_duration;
+        // If invariant were ever violated, refuse to place more
+        if (self.current_duration > self.max_duration) return false;
+        const remaining = self.max_duration - self.current_duration;
+        return note_duration <= remaining;
     }
 
     pub fn addNote(self: *MeasureState, note_duration: u32) void {
+        // Maintain invariant in debug; zero cost in release.
+        std.debug.assert(self.canAddNote(note_duration));
         self.current_duration += note_duration;
     }
 
@@ -164,18 +156,23 @@ pub const Generator = struct {
             .division_converter = null, // Not initialized by default
         };
     }
-    
+
     /// Initialize with proper MIDI to MusicXML conversion
     /// This is the correct way to initialize for accurate timing conversion
-    pub fn initWithConversion(allocator: std.mem.Allocator, midi_ppq: u32, target_divisions: u32) !Generator {
+    pub fn initWithConversion(
+        allocator: std.mem.Allocator,
+        midi_ppq: u32,
+        target_divisions: u32,
+    ) !Generator {
         const converter = try timing.DivisionConverter.init(midi_ppq, target_divisions);
+        const mxl_divs = converter.getMusicXMLDivisions(); // read once
+
         return .{
             .allocator = allocator,
-            .divisions = converter.getMusicXMLDivisions(), // Use the converted divisions
+            .divisions = mxl_divs,
             .midi_ppq = midi_ppq,
-            // Initialize quantizer with MusicXML divisions for proper quantization
-            .quantizer = duration_quantizer.DurationQuantizer.init(converter.getMusicXMLDivisions()),
-            .note_attr_generator = note_attributes.NoteAttributeGenerator.init(allocator, converter.getMusicXMLDivisions()),
+            .quantizer = duration_quantizer.DurationQuantizer.init(mxl_divs),
+            .note_attr_generator = note_attributes.NoteAttributeGenerator.init(allocator, mxl_divs),
             .division_converter = converter,
         };
     }
@@ -198,16 +195,13 @@ pub const Generator = struct {
         try xml_writer.startElement("note", null);
 
         if (is_rest) {
-            // Generate rest element
             try xml_writer.startElement("rest", null);
             try xml_writer.endElement(); // rest
         } else {
-            // Generate pitch element
             const pitch = midiToPitch(note);
             try xml_writer.startElement("pitch", null);
             try xml_writer.writeElement("step", pitch.step, null);
 
-            // Only write alter if non-zero
             if (pitch.alter != 0) {
                 var alter_buf: [8]u8 = undefined;
                 const alter_str = try std.fmt.bufPrint(&alter_buf, "{d}", .{pitch.alter});
@@ -221,27 +215,25 @@ pub const Generator = struct {
             try xml_writer.endElement(); // pitch
         }
 
-        // Write duration using professional quantization
-        // Implements EXECUTIVE MANDATE per critical timing accuracy issue
-        // TIMING-2.3 FIX: Convert MIDI ticks to MusicXML divisions if converter available
-        const duration_in_divisions = if (self.division_converter) |converter| blk: {
-            const converted = try converter.convertTicksToDivisions(duration);
-            break :blk converted;
-        } else duration; // Assume already in divisions if no converter
-        
+        // Inline conversion (identical logic, less noise)
+        const duration_in_divisions: u32 =
+            if (self.division_converter) |converter|
+                try converter.convertTicksToDivisions(duration)
+            else
+                duration;
+
         var duration_buf: [32]u8 = undefined;
         const duration_str = try std.fmt.bufPrint(&duration_buf, "{d}", .{duration_in_divisions});
         try xml_writer.writeElement("duration", duration_str, null);
 
-        // Determine note type based on duration
+        // Determine note type string and write it
         const note_type = try self.determineNoteType(duration_in_divisions);
         try xml_writer.writeElement("type", note_type, null);
 
-        // Calculate and write stem direction (only for pitched notes, not rests)
-        // Implements automatic stem direction per educational requirements
-        // Use voice 1 as default for basic note generation
+        // Stem for pitched notes only
         if (!is_rest) {
-            const stem_dir = stem_direction.StemDirectionCalculator.calculateVoiceAwareStemDirection(note, 1);
+            const stem_dir =
+                stem_direction.StemDirectionCalculator.calculateVoiceAwareStemDirection(note, 1);
             try xml_writer.writeElement("stem", stem_dir.toMusicXML(), null);
         }
 
@@ -286,14 +278,13 @@ pub const Generator = struct {
             try xml_writer.endElement(); // pitch
         }
 
-        // Write duration using professional quantization
-        // Implements EXECUTIVE MANDATE per critical timing accuracy issue
         // TIMING-2.3 FIX: Convert MIDI ticks to MusicXML divisions if converter available
-        const duration_in_divisions = if (self.division_converter) |converter| blk: {
-            const converted = try converter.convertTicksToDivisions(duration);
-            break :blk converted;
-        } else duration; // Assume already in divisions if no converter
-        
+        const duration_in_divisions: u32 =
+            if (self.division_converter) |converter|
+                try converter.convertTicksToDivisions(duration)
+            else
+                duration;
+
         // Write the actual duration without forcing to standard note values
         var duration_buf: [32]u8 = undefined;
         const duration_str = try std.fmt.bufPrint(&duration_buf, "{d}", .{duration_in_divisions});
@@ -309,7 +300,6 @@ pub const Generator = struct {
         try xml_writer.writeElement("type", note_type, null);
 
         // Calculate and write stem direction (only for pitched notes, not rests)
-        // Implements automatic stem direction per educational requirements
         if (!is_rest) {
             const stem_dir = stem_direction.StemDirectionCalculator.calculateVoiceAwareStemDirection(note, voice);
             try xml_writer.writeElement("stem", stem_dir.toMusicXML(), null);
@@ -332,18 +322,14 @@ pub const Generator = struct {
         start_tick: u32,
         end_tick: u32,
     ) !void {
-        // For TASK-009, we generate basic note elements
-        // Duration calculation will be refined in TASK-021 (Note Duration Tracker)
-
+        // TASK-009: basic note elements; duration will be refined in TASK-021
         for (note_events) |event| {
-            if (event.tick >= start_tick and event.tick < end_tick) {
-                if (event.isNoteOn()) {
-                    // For now, use a simple quarter note duration
-                    // This will be replaced with proper duration tracking in TASK-021
-                    const duration = self.divisions; // Quarter note
-                    try self.generateNoteElement(xml_writer, event.note, duration, false);
-                }
-            }
+            // Flattened predicate (equivalent to nested ifs)
+            if (event.tick < start_tick or event.tick >= end_tick or !event.isNoteOn())
+                continue;
+
+            const duration = self.divisions; // Quarter note placeholder
+            try self.generateNoteElement(xml_writer, event.note, duration, false);
         }
     }
 
@@ -353,25 +339,29 @@ pub const Generator = struct {
         defer xml_writer.deinit();
 
         try xml_writer.writeDeclaration();
-        try xml_writer.writeDoctype("score-partwise", "-//Recordare//DTD MusicXML 4.0 Partwise//EN", "http://www.musicxml.org/dtds/partwise.dtd");
+        try xml_writer.writeDoctype(
+            "score-partwise",
+            "-//Recordare//DTD MusicXML 4.0 Partwise//EN",
+            "http://www.musicxml.org/dtds/partwise.dtd",
+        );
     }
 
     /// Generate a minimal valid MusicXML document
     /// This creates the bare minimum structure required for a valid MusicXML file
     pub fn generateMinimalMusicXML(self: *const Generator, writer: anytype) !void {
+        // Reuse the centralized header routine
+        try self.writeXmlHeader(writer);
+
+        // Continue with a fresh XmlWriter on the same sink
         var xml_writer = XmlWriter.init(self.allocator, writer.any());
         defer xml_writer.deinit();
-
-        // Write XML declaration and DOCTYPE
-        try xml_writer.writeDeclaration();
-        try xml_writer.writeDoctype("score-partwise", "-//Recordare//DTD MusicXML 4.0 Partwise//EN", "http://www.musicxml.org/dtds/partwise.dtd");
 
         // Start root element with version attribute
         try xml_writer.startElement("score-partwise", &[_]Attribute{
             .{ .name = "version", .value = "4.0" },
         });
 
-        // Write part-list (required element)
+        // part-list (required)
         try xml_writer.startElement("part-list", null);
         try xml_writer.startElement("score-part", &[_]Attribute{
             .{ .name = "id", .value = "P1" },
@@ -380,23 +370,22 @@ pub const Generator = struct {
         try xml_writer.endElement(); // score-part
         try xml_writer.endElement(); // part-list
 
-        // Write part (required element)
+        // part (required)
         try xml_writer.startElement("part", &[_]Attribute{
             .{ .name = "id", .value = "P1" },
         });
 
-        // Write measure with attributes (required for valid MusicXML)
+        // measure 1 (required)
         try xml_writer.startElement("measure", &[_]Attribute{
             .{ .name = "number", .value = "1" },
         });
 
-        // Write attributes element with divisions (required)
+        // attributes with divisions (required)
         try xml_writer.startElement("attributes", null);
 
-        // Format divisions as string using normalized divisions for professional output
-        // Implements EXECUTIVE MANDATE per critical timing accuracy issue
         var divisions_buf: [32]u8 = undefined;
-        const divisions_str = try std.fmt.bufPrint(&divisions_buf, "{d}", .{self.quantizer.getNormalizedDivisions()});
+        const divisions_str =
+            try std.fmt.bufPrint(&divisions_buf, "{d}", .{self.quantizer.getNormalizedDivisions()});
         try xml_writer.writeElement("divisions", divisions_str, null);
 
         try xml_writer.endElement(); // attributes
@@ -407,19 +396,19 @@ pub const Generator = struct {
 
     /// Generate a minimal MusicXML with basic musical content
     pub fn generateMinimalWithNotes(self: *const Generator, writer: anytype) !void {
+        // Centralized header
+        try self.writeXmlHeader(writer);
+
+        // Proceed with content
         var xml_writer = XmlWriter.init(self.allocator, writer.any());
         defer xml_writer.deinit();
 
-        // Write header
-        try xml_writer.writeDeclaration();
-        try xml_writer.writeDoctype("score-partwise", "-//Recordare//DTD MusicXML 4.0 Partwise//EN", "http://www.musicxml.org/dtds/partwise.dtd");
-
-        // Start root element
+        // Root
         try xml_writer.startElement("score-partwise", &[_]Attribute{
             .{ .name = "version", .value = "4.0" },
         });
 
-        // Part-list
+        // part-list
         try xml_writer.startElement("part-list", null);
         try xml_writer.startElement("score-part", &[_]Attribute{
             .{ .name = "id", .value = "P1" },
@@ -428,35 +417,36 @@ pub const Generator = struct {
         try xml_writer.endElement(); // score-part
         try xml_writer.endElement(); // part-list
 
-        // Part
+        // part
         try xml_writer.startElement("part", &[_]Attribute{
             .{ .name = "id", .value = "P1" },
         });
 
-        // Measure 1
+        // measure 1
         try xml_writer.startElement("measure", &[_]Attribute{
             .{ .name = "number", .value = "1" },
         });
 
-        // Attributes
+        // attributes
         try xml_writer.startElement("attributes", null);
 
         var buf: [32]u8 = undefined;
-        const divisions_str = try std.fmt.bufPrint(&buf, "{d}", .{self.quantizer.getNormalizedDivisions()});
+        const divisions_str =
+            try std.fmt.bufPrint(&buf, "{d}", .{self.quantizer.getNormalizedDivisions()});
         try xml_writer.writeElement("divisions", divisions_str, null);
 
-        // Add key signature (C major)
+        // key: C major
         try xml_writer.startElement("key", null);
         try xml_writer.writeElement("fifths", "0", null);
         try xml_writer.endElement(); // key
 
-        // Add time signature (4/4)
+        // time: 4/4
         try xml_writer.startElement("time", null);
         try xml_writer.writeElement("beats", "4", null);
         try xml_writer.writeElement("beat-type", "4", null);
         try xml_writer.endElement(); // time
 
-        // Add clef
+        // clef: treble
         try xml_writer.startElement("clef", null);
         try xml_writer.writeElement("sign", "G", null);
         try xml_writer.writeElement("line", "2", null);
@@ -464,7 +454,7 @@ pub const Generator = struct {
 
         try xml_writer.endElement(); // attributes
 
-        // Add a simple note (middle C, quarter note)
+        // note: middle C, quarter duration
         try xml_writer.startElement("note", null);
 
         try xml_writer.startElement("pitch", null);
@@ -472,7 +462,6 @@ pub const Generator = struct {
         try xml_writer.writeElement("octave", "4", null);
         try xml_writer.endElement(); // pitch
 
-        // Use quarter note duration
         const duration_str = try std.fmt.bufPrint(&buf, "{d}", .{self.divisions});
         try xml_writer.writeElement("duration", duration_str, null);
         try xml_writer.writeElement("type", "quarter", null);
@@ -492,19 +481,19 @@ pub const Generator = struct {
         measures: []const @import("../timing/measure_detector.zig").Measure,
         tempo_events: []const @import("../midi/parser.zig").TempoEvent,
     ) !void {
+        // Reuse centralized header writer for declaration + DOCTYPE
+        try self.writeXmlHeader(writer);
+
+        // Proceed with content
         var xml_writer = XmlWriter.init(self.allocator, writer.any());
         defer xml_writer.deinit();
-
-        // Write header
-        try xml_writer.writeDeclaration();
-        try xml_writer.writeDoctype("score-partwise", "-//Recordare//DTD MusicXML 4.0 Partwise//EN", "http://www.musicxml.org/dtds/partwise.dtd");
 
         // Start root element
         try xml_writer.startElement("score-partwise", &[_]Attribute{
             .{ .name = "version", .value = "4.0" },
         });
 
-        // Part-list
+        // Part-list (single default part)
         try xml_writer.startElement("part-list", null);
         try xml_writer.startElement("score-part", &[_]Attribute{
             .{ .name = "id", .value = "P1" },
@@ -523,7 +512,7 @@ pub const Generator = struct {
 
         // Generate each measure with complete attributes
         for (measures, 0..) |measure, i| {
-            // Find tempo event for this measure if any
+            // Find tempo event for this measure if any (keep last in [start,end))
             var measure_tempo: ?*const @import("../midi/parser.zig").TempoEvent = null;
             while (tempo_index < tempo_events.len and
                 tempo_events[tempo_index].tick >= measure.start_tick and
@@ -533,7 +522,6 @@ pub const Generator = struct {
                 tempo_index += 1;
             }
 
-            // Write measure with all attributes
             try self.note_attr_generator.writeMeasureWithAttributes(
                 &xml_writer,
                 &measure,
@@ -838,14 +826,14 @@ pub const Generator = struct {
             const converted = try converter.convertTicksToDivisions(duration);
             break :blk converted;
         } else duration; // Assume already in divisions if no converter
-        
+
         // CRITICAL: Don't generate XML for tiny durations (filtered as noise)
         // Durations less than 5% of quarter note are measurement noise
         const min_duration = self.divisions / 20;
         if (duration_in_divisions < min_duration) {
             return; // Tiny durations absorbed as timing tolerance
         }
-        
+
         try xml_writer.startElement("note", null);
 
         // Rest element
@@ -912,7 +900,7 @@ pub const Generator = struct {
     /// Helper function to check if chord groups have multiple voices
     fn hasMultipleVoices(chord_groups: []const chord_detector.ChordGroup) bool {
         var voices_seen = std.bit_set.IntegerBitSet(8).initEmpty();
-        
+
         for (chord_groups) |group| {
             for (group.notes) |note| {
                 const voice = if (note.voice > 0) note.voice else 1;
@@ -923,10 +911,10 @@ pub const Generator = struct {
                 }
             }
         }
-        
+
         return false;
     }
-    
+
     /// Helper function to collect notes for a measure from chord groups
     fn collectMeasureNotes(
         self: *const Generator,
@@ -937,12 +925,12 @@ pub const Generator = struct {
     ) !usize {
         _ = self; // Currently unused
         var chord_index = start_index;
-        
+
         while (chord_index < chord_groups.len and !measure_state.isMeasureFull()) {
             const chord_group = chord_groups[chord_index];
             // Use first note's duration for measure tracking
             const chord_duration = if (chord_group.notes.len > 0) chord_group.notes[0].duration else 0;
-            
+
             if (measure_state.canAddNote(chord_duration)) {
                 // Add all notes from this chord group to the list
                 for (chord_group.notes) |note| {
@@ -956,7 +944,7 @@ pub const Generator = struct {
                 break;
             }
         }
-        
+
         return chord_index;
     }
 
@@ -973,7 +961,7 @@ pub const Generator = struct {
     ) !void {
         // Initialize measure state for 4/4 time (will be enhanced later)
         var measure_state = MeasureState.init(4, 4, self.divisions);
-        
+
         // TASK 4.1: Use pre-detected global chords or fall back to per-part detection for backward compatibility
         // Implements TASK 4.1 per CHORD_DETECTION_FIX_TASK_LIST.md lines 119-120
         const chord_groups = if (global_chords) |chords| blk: {
@@ -984,13 +972,13 @@ pub const Generator = struct {
             // Convert enhanced notes to timed notes for chord detection
             const timed_notes = try self.convertEnhancedToTimedNotes(enhanced_notes);
             defer self.allocator.free(timed_notes);
-            
+
             // Create chord detector and detect chords with 10 tick tolerance
             var detector = chord_detector.ChordDetector.init(self.allocator);
             const detected_chords = try detector.detectChords(timed_notes, 10);
             break :blk detected_chords;
         };
-        
+
         // Only clean up chord groups if we created them locally (backward compatibility path)
         // Global chords are owned by the pipeline and will be cleaned up there
         defer if (global_chords == null) {
@@ -1001,13 +989,13 @@ pub const Generator = struct {
             }
             self.allocator.free(mutable_chords);
         };
-        
+
         var chord_index: usize = 0;
 
         // CRITICAL SAFETY: Add loop iteration limits to prevent infinite loops
         var measure_iterations: u32 = 0;
         const max_measures: u32 = 10000; // Reasonable limit for any real music file
-        
+
         while (chord_index < chord_groups.len) {
             // CRITICAL SAFETY: Prevent infinite loops in measure generation
             measure_iterations += 1;
@@ -1015,18 +1003,18 @@ pub const Generator = struct {
                 std.debug.print("SAFETY: Too many measures generated ({d}), breaking to prevent hang\n", .{max_measures});
                 break;
             }
-            
+
             // Track starting position for progress check
             const start_chord_index = chord_index;
-            
+
             // BUG #2 FIX: Collect notes for this measure and check for multiple voices
             var measure_notes = std.ArrayList(enhanced_note.EnhancedTimedNote).init(self.allocator);
             defer measure_notes.deinit();
-            
+
             // Create a temporary measure state to track what fits in this measure
             var temp_measure_state = MeasureState.init(4, 4, self.divisions);
             temp_measure_state.measure_number = measure_state.measure_number;
-            
+
             // Collect all notes that fit in this measure
             const next_chord_index = try self.collectMeasureNotes(
                 chord_groups,
@@ -1034,7 +1022,7 @@ pub const Generator = struct {
                 &temp_measure_state,
                 &measure_notes,
             );
-            
+
             // Check if we have multiple voices in this measure's notes
             const measure_has_multiple_voices = blk: {
                 var voices_seen = std.bit_set.IntegerBitSet(8).initEmpty();
@@ -1047,7 +1035,7 @@ pub const Generator = struct {
                 }
                 break :blk false;
             };
-            
+
             // BUG #2 FIX: Use voice-aware generation when multiple voices are detected
             if (measure_has_multiple_voices) {
                 // Use the voice-aware generation with backup elements
@@ -1075,7 +1063,7 @@ pub const Generator = struct {
                 // Fill measure with chord groups
                 var note_iterations: u32 = 0;
                 const max_notes_per_measure: u32 = 1000; // Reasonable limit
-                
+
                 while (chord_index < chord_groups.len and !measure_state.isMeasureFull()) {
                     // CRITICAL SAFETY: Prevent infinite loops within measure
                     note_iterations += 1;
@@ -1101,7 +1089,7 @@ pub const Generator = struct {
                 // Fill remaining space with rest if measure is not full
                 if (!measure_state.isMeasureFull()) {
                     const remaining_duration = measure_state.getRemainingDuration();
-                    
+
                     // CRITICAL: Only generate rest for meaningful remainders per EXECUTIVE AUTHORITY fix
                     // Tiny remainders absorbed as timing tolerance, not amplified to full musical rests
                     const min_rest_threshold = self.divisions / 8; // Minimum 32nd note
@@ -1117,13 +1105,13 @@ pub const Generator = struct {
 
                 try xml_writer.endElement(); // measure
             }
-            
+
             // Update chord_index to the next position
             chord_index = next_chord_index;
 
             // Prepare for next measure
             measure_state.startNewMeasure();
-            
+
             // Check if we made progress in this iteration
             if (chord_index == start_chord_index and chord_index < chord_groups.len) {
                 // No progress made - force advance to prevent infinite loop
@@ -1136,7 +1124,7 @@ pub const Generator = struct {
     fn determineNoteType(self: *const Generator, duration: u32) ![]const u8 {
         // Calculate ratio relative to quarter note
         const ratio = @as(f64, @floatFromInt(duration)) / @as(f64, @floatFromInt(self.divisions));
-        
+
         // Map to closest standard note type
         if (ratio >= 6.0) return "breve";
         if (ratio >= 3.0) return "whole";
@@ -1179,7 +1167,7 @@ pub const Generator = struct {
 
     /// Generate backup element for multi-voice support
     /// Implements MVS-2.3 per MULTI_VOICE_SEPARATION_TASK_LIST.md
-    /// 
+    ///
     /// The backup element moves the temporal position backward within a measure,
     /// enabling multiple voices to start at the same time point. This is essential
     /// for proper multi-voice MusicXML representation.
@@ -1189,7 +1177,7 @@ pub const Generator = struct {
     ///
     /// Example with divisions=480:
     /// - To move back one quarter note: duration=480
-    /// - To move back a half note: duration=960  
+    /// - To move back a half note: duration=960
     /// - To move back a whole note: duration=1920
     ///
     /// Args:
@@ -1253,7 +1241,7 @@ pub const Generator = struct {
 
     /// Group enhanced notes by voice for multi-voice measure generation
     /// Implements MVS-2.3 voice grouping algorithm per MUSICXML_VOICE_BACKUP_RESEARCH.md
-    /// 
+    ///
     /// This function takes a collection of enhanced notes and groups them by voice number,
     /// maintaining the order within each voice for proper temporal sequencing.
     /// Voice groups are sorted by voice number (1, 2, 5, 6, etc.) for consistent output.
@@ -1335,7 +1323,7 @@ pub const Generator = struct {
     /// Algorithm follows research from MUSICXML_VOICE_BACKUP_RESEARCH.md Section 4.1:
     /// ```
     /// 1. Initialize cumulative_duration = 0
-    /// 2. Group notes by voice within each measure  
+    /// 2. Group notes by voice within each measure
     /// 3. For each voice in order (1, 2, 5, 6, etc.):
     ///    a. If cumulative_duration > 0:
     ///       - Insert backup element with duration = cumulative_duration
@@ -1401,7 +1389,7 @@ pub const Generator = struct {
                     const prev_note = voice_group.notes.items[i - 1];
                     break :blk note.base_note.start_tick == prev_note.base_note.start_tick;
                 } else false;
-                
+
                 try self.generateEnhancedNoteElement(xml_writer, &note, is_chord);
                 cumulative_duration += note.base_note.duration;
             }
@@ -1503,7 +1491,7 @@ pub const Generator = struct {
             try converter.convertTicksToDivisions(base_note.duration)
         else
             base_note.duration; // Fallback: assume already in divisions
-            
+
         // Write the actual duration without forcing to standard note values
         // This preserves the exact rhythms from the MIDI file for educational accuracy
         var duration_buf: [32]u8 = undefined;
@@ -1521,7 +1509,7 @@ pub const Generator = struct {
         // Determine note type based on duration
         const note_type = try self.determineNoteType(duration_in_divisions);
         try xml_writer.writeElement("type", note_type, null);
-        
+
         // Write staff assignment based on pitch
         if (!is_rest) {
             const staff = @import("note_attributes.zig").getStaffForNote(base_note.note);
@@ -1624,7 +1612,7 @@ pub const Generator = struct {
         is_enhanced: bool,
     ) !void {
         if (chord_group.notes.len == 0) return;
-        
+
         // First note in chord is written normally (establishes duration/voice)
         if (is_enhanced) {
             // Convert first note to enhanced note for generation
@@ -1634,74 +1622,69 @@ pub const Generator = struct {
             const first_note = chord_group.notes[0];
             // Calculate staff assignment individually for first note
             const staff_number = @import("note_attributes.zig").getStaffForNote(first_note.note);
-            try self.generateNoteElementWithAttributes(
-                xml_writer,
-                first_note.note,
-                first_note.duration,
-                false, // not a rest
+            try self.generateNoteElementWithAttributes(xml_writer, first_note.note, first_note.duration, false, // not a rest
                 1, // default voice
-                staff_number
-            );
+                staff_number);
         }
-        
+
         // Remaining notes in chord need <chord/> element
         for (chord_group.notes[1..]) |note| {
             try xml_writer.startElement("note", null);
-            
+
             // CRITICAL: <chord/> element indicates this note is simultaneous with previous
             try xml_writer.writeEmptyElement("chord", null);
-            
+
             // Generate pitch
             const pitch = midiToPitch(note.note);
             try xml_writer.startElement("pitch", null);
             try xml_writer.writeElement("step", pitch.step, null);
-            
+
             if (pitch.alter != 0) {
                 var alter_buf: [8]u8 = undefined;
                 const alter_str = try std.fmt.bufPrint(&alter_buf, "{d}", .{pitch.alter});
                 try xml_writer.writeElement("alter", alter_str, null);
             }
-            
+
             var octave_buf: [8]u8 = undefined;
             const octave_str = try std.fmt.bufPrint(&octave_buf, "{d}", .{pitch.octave});
             try xml_writer.writeElement("octave", octave_str, null);
-            
+
             try xml_writer.endElement(); // pitch
-            
+
             // Duration (must match first note in chord)
             // TIMING-2.3 FIX: Convert MIDI ticks to MusicXML divisions
             const duration_in_divisions = if (self.division_converter) |converter| blk: {
                 const converted = try converter.convertTicksToDivisions(note.duration);
                 break :blk converted;
             } else note.duration;
-            
+
             var duration_buf: [32]u8 = undefined;
             const duration_str = try std.fmt.bufPrint(&duration_buf, "{d}", .{duration_in_divisions});
             try xml_writer.writeElement("duration", duration_str, null);
-            
+
             // Staff assignment - calculate individually for each note
             const staff_number = @import("note_attributes.zig").getStaffForNote(note.note);
-            
+
             // Voice with piano convention mapping
             const raw_voice = if (note.voice > 0) note.voice else 1;
             const mapped_voice = @import("note_attributes.zig").mapVoiceForPiano(raw_voice, staff_number);
             var voice_buf: [8]u8 = undefined;
             const voice_str = try std.fmt.bufPrint(&voice_buf, "{d}", .{mapped_voice});
             try xml_writer.writeElement("voice", voice_str, null);
-            
+
             // Type
             const note_type = try self.determineNoteType(duration_in_divisions);
             try xml_writer.writeElement("type", note_type, null);
-            
+
             // Staff element
             var staff_buf: [8]u8 = undefined;
             const staff_str = try std.fmt.bufPrint(&staff_buf, "{d}", .{staff_number});
             try xml_writer.writeElement("staff", staff_str, null);
-            
+
             // Stem direction (should match first note)
             const stem_dir = stem_direction.StemDirectionCalculator.calculateVoiceAwareStemDirection(note.note, 1);
             try xml_writer.writeElement("stem", stem_dir.toMusicXML(), null);
-            
+
             try xml_writer.endElement(); // note
         }
     }
@@ -1793,12 +1776,12 @@ test "generateBackupElement basic functionality" {
     defer xml_writer.deinit();
 
     const generator = Generator.init(std.testing.allocator, 480);
-    
+
     // Test backup element generation with quarter note duration
     try generator.generateBackupElement(&xml_writer, 480);
-    
+
     const output = buffer.items;
-    
+
     // Verify backup element structure
     try std.testing.expect(std.mem.indexOf(u8, output, "<backup>") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "<duration>480</duration>") != null);
@@ -1813,19 +1796,19 @@ test "generateBackupElement with different durations" {
     defer xml_writer.deinit();
 
     const generator = Generator.init(std.testing.allocator, 480);
-    
+
     // Test half note backup (960 divisions)
     try generator.generateBackupElement(&xml_writer, 960);
-    
-    // Test whole note backup (1920 divisions)  
+
+    // Test whole note backup (1920 divisions)
     try generator.generateBackupElement(&xml_writer, 1920);
-    
+
     const output = buffer.items;
-    
+
     // Verify multiple backup elements with correct durations
     try std.testing.expect(std.mem.indexOf(u8, output, "<duration>960</duration>") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "<duration>1920</duration>") != null);
-    
+
     // Count backup elements (should be 2)
     var count: u32 = 0;
     var search_start: usize = 0;
@@ -1844,12 +1827,12 @@ test "generateBackupElement with zero duration" {
     defer xml_writer.deinit();
 
     const generator = Generator.init(std.testing.allocator, 480);
-    
+
     // Test that zero duration produces no output
     try generator.generateBackupElement(&xml_writer, 0);
-    
+
     const output = buffer.items;
-    
+
     // Should produce no backup elements for zero duration
     try std.testing.expect(std.mem.indexOf(u8, output, "<backup>") == null);
     try std.testing.expect(output.len == 0);
@@ -1858,7 +1841,7 @@ test "generateBackupElement with zero duration" {
 test "groupNotesByVoice basic functionality" {
     const allocator = std.testing.allocator;
     const generator = Generator.init(allocator, 480);
-    
+
     // Create test enhanced notes with different voices
     var test_notes = [_]enhanced_note.EnhancedTimedNote{
         enhanced_note.EnhancedTimedNote{
@@ -1874,7 +1857,7 @@ test "groupNotesByVoice basic functionality" {
         },
         enhanced_note.EnhancedTimedNote{
             .base_note = .{
-                .note = 64, // E4  
+                .note = 64, // E4
                 .channel = 0,
                 .velocity = 64,
                 .duration = 480,
@@ -1895,7 +1878,7 @@ test "groupNotesByVoice basic functionality" {
             },
         },
     };
-    
+
     // Group notes by voice
     var voice_groups = try generator.groupNotesByVoice(allocator, &test_notes);
     defer {
@@ -1904,18 +1887,18 @@ test "groupNotesByVoice basic functionality" {
         }
         voice_groups.deinit();
     }
-    
+
     // Should have 2 voice groups (voice 1 and voice 5)
     try std.testing.expect(voice_groups.items.len == 2);
-    
+
     // Check voice numbers are sorted correctly
     try std.testing.expect(voice_groups.items[0].voice_number == 1);
     try std.testing.expect(voice_groups.items[1].voice_number == 5);
-    
+
     // Check note counts per voice
     try std.testing.expect(voice_groups.items[0].notes.items.len == 2); // Two treble notes
     try std.testing.expect(voice_groups.items[1].notes.items.len == 1); // One bass note
-    
+
     // Check total durations
     try std.testing.expect(voice_groups.items[0].total_duration == 960); // 480 + 480
     try std.testing.expect(voice_groups.items[1].total_duration == 960); // 960
@@ -1924,7 +1907,7 @@ test "groupNotesByVoice basic functionality" {
 test "groupNotesByVoice with unassigned voice defaults to 1" {
     const allocator = std.testing.allocator;
     const generator = Generator.init(allocator, 480);
-    
+
     // Create test note with voice = 0 (unassigned)
     var test_notes = [_]enhanced_note.EnhancedTimedNote{
         enhanced_note.EnhancedTimedNote{
@@ -1939,7 +1922,7 @@ test "groupNotesByVoice with unassigned voice defaults to 1" {
             },
         },
     };
-    
+
     // Group notes by voice
     var voice_groups = try generator.groupNotesByVoice(allocator, &test_notes);
     defer {
@@ -1948,7 +1931,7 @@ test "groupNotesByVoice with unassigned voice defaults to 1" {
         }
         voice_groups.deinit();
     }
-    
+
     // Should default to voice 1
     try std.testing.expect(voice_groups.items.len == 1);
     try std.testing.expect(voice_groups.items[0].voice_number == 1);
