@@ -52,9 +52,9 @@ pub const MinimalChordDetector = struct {
                 const tracks = try collectTracksFast(self.allocator, owned);
 
                 // Preserve old single-note staff rule; use determineStaff for multi-note groups
-                const staff =
+                const staff: u8 =
                     if (owned.len == 1)
-                        (if (owned[0].note < 60) 2 else 1)
+                        (if (owned[0].note < 60) @as(u8, 2) else @as(u8, 1))
                     else
                         determineStaff(owned);
 
@@ -134,7 +134,7 @@ pub const MinimalChordDetector = struct {
         const tracks = try allocator.alloc(u8, count);
 
         var idx: usize = 0;
-        var t: u16 = 0;
+        var t: u4 = 0;
         while (t < 16) : (t += 1) {
             if (((mask >> t) & 1) == 1) {
                 tracks[idx] = @intCast(t); // context gives u8

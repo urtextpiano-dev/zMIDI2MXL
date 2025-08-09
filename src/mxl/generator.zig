@@ -13,6 +13,7 @@ const tuplet_detector = @import("../timing/tuplet_detector.zig");
 const dynamics_mapper = @import("../interpreter/dynamics_mapper.zig");
 const duration_quantizer = @import("duration_quantizer.zig");
 const chord_detector = @import("../harmony/chord_detector.zig");
+const xmlh = @import("xml_helpers.zig");
 
 // Implements TASK-008 per MXL_Architecture_Reference.md Section 8.3 lines 1016-1034
 // Generate Minimal Valid MusicXML that validates against MusicXML 4.0 DTD
@@ -1206,9 +1207,7 @@ pub const Generator = struct {
         try xml_writer.startElement("backup", null);
 
         // Write duration as child element
-        var duration_buf: [32]u8 = undefined;
-        const duration_str = try std.fmt.bufPrint(&duration_buf, "{d}", .{duration});
-        try xml_writer.writeElement("duration", duration_str, null);
+        try xmlh.writeIntElement(xml_writer, "duration", duration);
 
         // Close backup element
         try xml_writer.endElement(); // backup
