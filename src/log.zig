@@ -21,7 +21,7 @@ pub const LogConfig = struct {
     level: LogLevel = .info,
     show_timestamp: bool = true,
     show_location: bool = true,
-    writer: std.io.AnyWriter = std.io.getStdErr().writer().any(),
+    writer: ?std.io.AnyWriter = null,
 };
 
 // Main logger structure
@@ -53,10 +53,13 @@ pub const Logger = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
 
+        // Get writer, use stderr as default if not provided
+        const writer = self.config.writer orelse std.io.getStdErr().writer().any();
+
         // Build the log message
         if (self.config.show_timestamp) {
             const timestamp = std.time.milliTimestamp();
-            self.config.writer.print("[{d}] ", .{timestamp}) catch return;
+            writer.print("[{d}] ", .{timestamp}) catch return;
         }
 
         // Log level
@@ -67,11 +70,11 @@ pub const Logger = struct {
             .warn => "WARN ",
             .err => "ERROR",
         };
-        self.config.writer.print("[{s}] ", .{level_str}) catch return;
+        writer.print("[{s}] ", .{level_str}) catch return;
 
         // Actual message
-        self.config.writer.print(format, args) catch return;
-        self.config.writer.writeAll("\n") catch return;
+        writer.print(format, args) catch return;
+        writer.writeAll("\n") catch return;
     }
 
     // Convenience methods for each log level
@@ -115,9 +118,12 @@ pub const Logger = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
 
+        // Get writer, use stderr as default if not provided
+        const writer = self.config.writer orelse std.io.getStdErr().writer().any();
+
         if (self.config.show_timestamp) {
             const timestamp = std.time.milliTimestamp();
-            self.config.writer.print("[{d}] ", .{timestamp}) catch return;
+            writer.print("[{d}] ", .{timestamp}) catch return;
         }
 
         const level_str = switch (level) {
@@ -127,26 +133,26 @@ pub const Logger = struct {
             .warn => "WARN ",
             .err => "ERROR",
         };
-        self.config.writer.print("[{s}] [", .{level_str}) catch return;
+        writer.print("[{s}] [", .{level_str}) catch return;
 
-        self.config.writer.writeAll("Track ") catch return;
+        writer.writeAll("Track ") catch return;
         if (track) |t| {
-            self.config.writer.print("{d}", .{t}) catch return;
+            writer.print("{d}", .{t}) catch return;
         } else {
-            self.config.writer.writeAll("?") catch return;
+            writer.writeAll("?") catch return;
         }
 
-        self.config.writer.writeAll(" @ tick ") catch return;
+        writer.writeAll(" @ tick ") catch return;
         if (tick) |k| {
-            self.config.writer.print("{d}", .{k}) catch return;
+            writer.print("{d}", .{k}) catch return;
         } else {
-            self.config.writer.writeAll("?") catch return;
+            writer.writeAll("?") catch return;
         }
 
-        self.config.writer.writeAll("] ") catch return;
+        writer.writeAll("] ") catch return;
 
-        self.config.writer.print(format, args) catch return;
-        self.config.writer.writeAll("\n") catch return;
+        writer.print(format, args) catch return;
+        writer.writeAll("\n") catch return;
     }
 };
 

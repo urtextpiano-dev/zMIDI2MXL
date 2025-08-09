@@ -2508,7 +2508,7 @@ pub const EducationalProcessor = struct {
         const BeamCtx = struct { notes: ?[]u8, id: ?u32 };
         const beam_ctx: BeamCtx = blk: {
             for (beam_groups) |beam_group| {
-                for (beam_group.notes, 0..) |group_note, _| {
+                for (beam_group.notes) |group_note| {
                     if (group_note.base_note.start_tick == note.base_note.start_tick and
                         group_note.base_note.note == note.base_note.note)
                     {
