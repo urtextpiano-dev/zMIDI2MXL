@@ -1,0 +1,22 @@
+{
+  "timestamp": "1754849516.1296282",
+  "files": {
+    "our_output": "sweden_output.mxl",
+    "reference": "No reference provided"
+  },
+  "validation": {
+    "our_output": "VALID"
+  },
+  "comparison": {},
+  "accuracy": 0.0,
+  "errors": [],
+  "warnings": [],
+  "metrics": {
+    "total_notes": 275,
+    "total_measures": 65,
+    "total_parts": 1,
+    "unique_voices": 7,
+    "rest_count": 10,
+    "chord_notes": 34
+  }
+}

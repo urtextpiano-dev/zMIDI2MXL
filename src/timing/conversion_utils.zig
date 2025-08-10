@@ -1,8 +1,7 @@
-const std = @import("std");
 const timing = @import("../timing.zig");
 
-/// Convert ticks using optional division converter, or return unchanged if no converter
-pub inline fn convertTicksOrSame(ticks: u32, converter: ?timing.DivisionConverter) !u32 {
+/// Convert ticks using optional division converter, or return unchanged if no converter.
+pub fn convertTicksOrSame(ticks: u32, converter: ?timing.DivisionConverter) !u32 {
     return if (converter) |c|
         try c.convertTicksToDivisions(ticks)
     else

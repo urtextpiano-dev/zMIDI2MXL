@@ -1500,7 +1500,7 @@ pub const Generator = struct {
         // Beam information: simpler, no switch duplication
         if (enhanced.beaming_info) |beam_info| {
             if (beam_info.can_beam and beam_info.beam_state != .none) {
-                const beam_text = std.meta.tagName(beam_info.beam_state); // "begin","continue","end"
+                const beam_text = @tagName(beam_info.beam_state); // "begin","continue","end"
                 try xml_writer.writeElement("beam", beam_text, &[_]Attribute{
                     .{ .name = "number", .value = "1" },
                 });

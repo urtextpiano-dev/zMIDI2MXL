@@ -206,53 +206,45 @@ pub const NoteAttributeGenerator = struct {
     ) !void {
         try xml_writer.startElement("attributes", null);
 
-        // Write divisions (required) using normalized professional divisions
-        // Implements EXECUTIVE MANDATE per critical timing accuracy issue
-        try xmlh.writeIntElement(xml_writer, "divisions", self.quantizer.getNormalizedDivisions());
+        // Divisions
+        var divisions_buf: [32]u8 = undefined;
+        const divisions_str = try std.fmt.bufPrint(&divisions_buf, "{d}", .{self.quantizer.getNormalizedDivisions()});
+        try xml_writer.writeElement("divisions", divisions_str, null);
 
-        // Add key signature from MIDI data (FIX-2.1)
+        // Key
         try xml_writer.startElement("key", null);
-        try xmlh.writeIntElement(xml_writer, "fifths", key_fifths);
+        var fifths_buf: [8]u8 = undefined;
+        const fifths_str = try std.fmt.bufPrint(&fifths_buf, "{d}", .{key_fifths});
+        try xml_writer.writeElement("fifths", fifths_str, null);
         try xml_writer.endElement(); // key
 
-        // Only add time signature in first measure
+        // Time only on first measure
         if (measure_number == 1) {
             try xml_writer.startElement("time", null);
-            try xmlh.writeIntElement(xml_writer, "beats", 4);
-            try xmlh.writeIntElement(xml_writer, "beat-type", 4);
+            try xml_writer.writeElement("beats", "4", null);
+            try xml_writer.writeElement("beat-type", "4", null);
             try xml_writer.endElement(); // time
         }
 
-        // Write staves element - 2 for piano, 1 for other instruments
-        if (is_piano) {
-            try xmlh.writeIntElement(xml_writer, "staves", 2);
-        } else {
-            try xmlh.writeIntElement(xml_writer, "staves", 1);
-        }
+        // Staves: collapse to a single write
+        try xml_writer.writeElement("staves", if (is_piano) "2" else "1", null);
 
-        // Write clefs only when requested (typically first measure only)
+        // Optional clefs
         if (include_clefs) {
             if (is_piano) {
-                // Treble clef for staff 1
-                try xml_writer.startElement("clef", &[_]Attribute{
-                    .{ .name = "number", .value = "1" },
-                });
+                try xml_writer.startElement("clef", &[_]Attribute{.{ .name = "number", .value = "1" }});
                 try xml_writer.writeElement("sign", "G", null);
-                try xmlh.writeIntElement(xml_writer, "line", 2);
+                try xml_writer.writeElement("line", "2", null);
                 try xml_writer.endElement(); // clef
 
-                // Bass clef for staff 2
-                try xml_writer.startElement("clef", &[_]Attribute{
-                    .{ .name = "number", .value = "2" },
-                });
+                try xml_writer.startElement("clef", &[_]Attribute{.{ .name = "number", .value = "2" }});
                 try xml_writer.writeElement("sign", "F", null);
-                try xmlh.writeIntElement(xml_writer, "line", 4);
+                try xml_writer.writeElement("line", "4", null);
                 try xml_writer.endElement(); // clef
             } else {
-                // Single treble clef for non-piano instruments
                 try xml_writer.startElement("clef", null);
                 try xml_writer.writeElement("sign", "G", null);
-                try xmlh.writeIntElement(xml_writer, "line", 2);
+                try xml_writer.writeElement("line", "2", null);
                 try xml_writer.endElement(); // clef
             }
         }

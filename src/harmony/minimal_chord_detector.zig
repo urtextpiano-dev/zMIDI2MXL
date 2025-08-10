@@ -131,10 +131,10 @@ pub const MinimalChordDetector = struct {
         const tracks = try allocator.alloc(u8, count);
 
         var idx: usize = 0;
-        var track_idx: u4 = 0;
+        var track_idx: u8 = 0;
         while (track_idx < 16) : (track_idx += 1) {
-            if (((mask >> track_idx) & 1) == 1) {
-                tracks[idx] = @intCast(track_idx); // context gives u8
+            if (((mask >> @as(u4, @intCast(track_idx))) & 1) == 1) {
+                tracks[idx] = track_idx;
                 idx += 1;
             }
         }

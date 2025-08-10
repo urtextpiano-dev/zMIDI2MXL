@@ -1,23 +1,25 @@
 const std = @import("std");
 const containers = @import("../utils/containers.zig");
 const log = @import("../utils/log.zig");
+const xml_mod = @import("xml_writer.zig");
 
 // Implements TASK-010 per MXL_Architecture_Reference.md Section 7 lines 923-1070
 // ZIP Archive Generator for MXL format with DEFLATE compression
 
-// Local error for compression and ZIP validation
+// Local error set for input/size/offset validation
 const ZipError = error{
     CompressionFailed,
     InvalidFilename,
     FilenameTooLong,
     FileTooLarge,
     OffsetOverflow,
+    InvalidUtf8,
 };
 
 /// ZIP format constants
-const ZIP_LOCAL_FILE_HEADER_SIGNATURE: u32 = 0x04034b50; // "PK\x03\x04"
-const ZIP_CENTRAL_DIR_HEADER_SIGNATURE: u32 = 0x02014b50; // "PK\x01\x02"
-const ZIP_END_OF_CENTRAL_DIR_SIGNATURE: u32 = 0x06054b50; // "PK\x05\x06"
+const ZIP_LOCAL_FILE_HEADER_SIGNATURE: u32 = 0x0403_4b50; // "PK\x03\x04"
+const ZIP_CENTRAL_DIR_HEADER_SIGNATURE: u32 = 0x0201_4b50; // "PK\x01\x02"
+const ZIP_END_OF_CENTRAL_DIR_SIGNATURE: u32 = 0x0605_4b50; // "PK\x05\x06"
 
 /// Compression methods
 const COMPRESSION_METHOD_STORE: u16 = 0;
@@ -28,9 +30,6 @@ const ZIP_VERSION_NEEDED: u16 = 20; // 2.0 - supports DEFLATE
 
 /// General purpose bit flags
 const FLAG_UTF8_ENCODING: u16 = 0x0800; // Bit 11 - UTF-8 filename encoding
-
-/// CRC-32 polynomial for ZIP
-const CRC32_POLYNOMIAL: u32 = 0xEDB88320;
 
 /// Entry information for central directory
 const ZipEntry = struct {
@@ -50,19 +49,15 @@ pub const ZipWriter = struct {
     writer: std.io.AnyWriter,
     entries: containers.List(ZipEntry),
     current_offset: u32,
-    crc_table: [256]u32,
 
     /// Initialize a new ZIP writer
     pub fn init(allocator: std.mem.Allocator, writer: std.io.AnyWriter) ZipWriter {
-        var self = ZipWriter{
+        return .{
             .allocator = allocator,
             .writer = writer,
             .entries = containers.List(ZipEntry).init(allocator),
             .current_offset = 0,
-            .crc_table = undefined,
         };
-        self.initCrcTable();
-        return self;
     }
 
     /// Clean up resources
@@ -70,32 +65,13 @@ pub const ZipWriter = struct {
         self.entries.deinit();
     }
 
-    /// Initialize CRC-32 lookup table
-    fn initCrcTable(self: *ZipWriter) void {
-        for (0..256) |i| {
-            var crc: u32 = @intCast(i);
-            for (0..8) |_| {
-                if (crc & 1 != 0) {
-                    crc = (crc >> 1) ^ CRC32_POLYNOMIAL;
-                } else {
-                    crc >>= 1;
-                }
-            }
-            self.crc_table[i] = crc;
-        }
-    }
-
-    /// Calculate CRC-32 checksum
+    /// Calculate CRC-32 checksum (IEEE) — stdlib, clear and correct
     /// Implements TASK-010 per MXL_Architecture_Reference.md Section 7.2 lines 951-967
     pub fn calculateCrc32(self: *const ZipWriter, data: []const u8) u32 {
-        var crc: u32 = 0xFFFFFFFF;
-        
-        for (data) |byte| {
-            const table_idx = @as(u8, @truncate(crc ^ byte));
-            crc = (crc >> 8) ^ self.crc_table[table_idx];
-        }
-        
-        return crc ^ 0xFFFFFFFF;
+        _ = self;
+        var h = std.hash.crc.Crc32.init();
+        h.update(data);
+        return h.final();
     }
 
     /// Add a file to the ZIP archive
@@ -107,34 +83,37 @@ pub const ZipWriter = struct {
         compress: bool,
     ) !void {
         // Validate inputs to prevent corruption
-        if (filename.len == 0) return error.InvalidFilename;
-        if (filename.len > 65535) return error.FilenameTooLong;
-        if (data.len > std.math.maxInt(u32)) return error.FileTooLarge;
-        // For simplicity, use a fixed date/time for now
-        // This can be enhanced later to use actual timestamps
-        // Date: 2024-01-01, Time: 12:00:00
-        const mod_date: u16 = ((2024 - 1980) << 9) | (1 << 5) | 1;  // Year 2024, Month 1, Day 1
-        const mod_time: u16 = (12 << 11) | (0 << 5) | 0;  // Hour 12, Minute 0, Second 0
+        if (filename.len == 0) return ZipError.InvalidFilename;
+        if (filename.len > 65535) return ZipError.FilenameTooLong;
+        // Validate filename is UTF-8 since we set FLAG_UTF8_ENCODING
+        if (std.unicode.Utf8View.init(filename)) |_| {} else |_| {
+            return ZipError.InvalidUtf8;
+        }
+        if (data.len > std.math.maxInt(u32)) return ZipError.FileTooLarge;
+
+        // Fixed timestamp (can be improved later)
+        const mod_date: u16 = ((2024 - 1980) << 9) | (1 << 5) | 1; // 2024-01-01
+        const mod_time: u16 = (12 << 11) | (0 << 5) | 0; // 12:00:00
 
         const entry_offset = self.current_offset;
-        
-        // Compress data if requested
+
+        // Compress data if requested (and not the "mimetype" special case)
         var compressed_data: []u8 = undefined;
-        var should_free = false;
-        const compression_method = if (compress and filename.len > 0 and !std.mem.eql(u8, filename, "mimetype")) blk: {
+        var must_free = false;
+        const compression_method: u16 = if (compress and !std.mem.eql(u8, filename, "mimetype")) blk: {
             compressed_data = try self.compressDeflate(data);
-            should_free = true;
+            must_free = true;
             break :blk COMPRESSION_METHOD_DEFLATE;
         } else blk: {
             compressed_data = @constCast(data);
             break :blk COMPRESSION_METHOD_STORE;
         };
-        defer if (should_free) self.allocator.free(compressed_data);
+        defer if (must_free) self.allocator.free(compressed_data);
 
-        // Calculate CRC-32 of uncompressed data
+        // CRC-32 of *uncompressed* data
         const crc32 = self.calculateCrc32(data);
 
-        // Write local file header
+        // Local file header
         try self.writeLocalFileHeader(
             filename,
             crc32,
@@ -145,17 +124,10 @@ pub const ZipWriter = struct {
             mod_date,
         );
 
-        // Write file data
-        try self.writer.writeAll(compressed_data);
-        
-        // CRITICAL FIX: Update offset tracking after writing file data
-        // Implements TASK-010 per MXL_Architecture_Reference.md Section 7.4 lines 996-1022
-        // This prevents ZIP corruption from incorrect offset calculations
-        const new_offset = self.current_offset + @as(u32, @intCast(compressed_data.len));
-        if (new_offset < self.current_offset) return ZipError.OffsetOverflow; // Detect overflow
-        self.current_offset = new_offset;
+        // File data
+        try self.writeBytes(compressed_data);
 
-        // Store entry info for central directory
+        // Store entry for central directory
         try self.entries.append(.{
             .filename = try self.allocator.dupe(u8, filename),
             .crc32 = crc32,
@@ -179,75 +151,37 @@ pub const ZipWriter = struct {
         mod_time: u16,
         mod_date: u16,
     ) !void {
-        // Signature
-        try self.writer.writeInt(u32, ZIP_LOCAL_FILE_HEADER_SIGNATURE, .little);
-        self.current_offset += 4;
-
-        // Version needed to extract
-        try self.writer.writeInt(u16, ZIP_VERSION_NEEDED, .little);
-        self.current_offset += 2;
-
-        // General purpose bit flag (UTF-8 encoding)
-        try self.writer.writeInt(u16, FLAG_UTF8_ENCODING, .little);
-        self.current_offset += 2;
-
-        // Compression method
-        try self.writer.writeInt(u16, compression_method, .little);
-        self.current_offset += 2;
-
-        // Last mod file time
-        try self.writer.writeInt(u16, mod_time, .little);
-        self.current_offset += 2;
-
-        // Last mod file date
-        try self.writer.writeInt(u16, mod_date, .little);
-        self.current_offset += 2;
-
-        // CRC-32
-        try self.writer.writeInt(u32, crc32, .little);
-        self.current_offset += 4;
-
-        // Compressed size
-        try self.writer.writeInt(u32, compressed_size, .little);
-        self.current_offset += 4;
-
-        // Uncompressed size
-        try self.writer.writeInt(u32, uncompressed_size, .little);
-        self.current_offset += 4;
-
-        // File name length
-        try self.writer.writeInt(u16, @intCast(filename.len), .little);
-        self.current_offset += 2;
-
-        // Extra field length
-        try self.writer.writeInt(u16, 0, .little);
-        self.current_offset += 2;
-
-        // File name
-        try self.writer.writeAll(filename);
-        self.current_offset += @intCast(filename.len);
+        try self.wU32(ZIP_LOCAL_FILE_HEADER_SIGNATURE);
+        try self.wU16(ZIP_VERSION_NEEDED);
+        try self.wU16(FLAG_UTF8_ENCODING); // UTF-8 filenames
+        try self.wU16(compression_method);
+        try self.wU16(mod_time);
+        try self.wU16(mod_date);
+        try self.wU32(crc32);
+        try self.wU32(compressed_size);
+        try self.wU32(uncompressed_size);
+        try self.wU16(@intCast(filename.len)); // file name length
+        try self.wU16(0); // extra field length
+        try self.writeBytes(filename); // file name
     }
 
-    /// Compress data using DEFLATE
+    /// Compress data using DEFLATE (raw) by stripping zlib wrapper
     /// Implements TASK-010 per MXL_Architecture_Reference.md Section 7.3 lines 970-986
     fn compressDeflate(self: *ZipWriter, data: []const u8) ![]u8 {
         var compressed = containers.List(u8).init(self.allocator);
         defer compressed.deinit();
 
-        // Use zlib compression
         var stream = try std.compress.zlib.compressor(compressed.writer(), .{});
         try stream.writer().writeAll(data);
         try stream.finish();
 
-        // Extract raw DEFLATE data (skip zlib header and checksum)
-        const zlib_data = compressed.items;
-        if (zlib_data.len < 6) return ZipError.CompressionFailed;
-        
-        // Skip 2-byte header and 4-byte Adler32 checksum at the end
-        const deflate_data = try self.allocator.alloc(u8, zlib_data.len - 6);
-        @memcpy(deflate_data, zlib_data[2..zlib_data.len - 4]);
-        
-        return deflate_data;
+        const z = compressed.items;
+        if (z.len < 6) return ZipError.CompressionFailed;
+
+        // Strip zlib 2-byte header and 4-byte Adler32 trailer → raw deflate
+        const out = try self.allocator.alloc(u8, z.len - 6);
+        @memcpy(out, z[2 .. z.len - 4]);
+        return out;
     }
 
     /// Finalize the ZIP archive by writing central directory
@@ -255,14 +189,14 @@ pub const ZipWriter = struct {
     pub fn finalize(self: *ZipWriter) !void {
         const central_dir_offset = self.current_offset;
 
-        // Write central directory headers
+        // Central directory headers
         for (self.entries.items) |entry| {
             try self.writeCentralDirectoryHeader(entry);
         }
 
-        const central_dir_size = self.current_offset - central_dir_offset;
+        const central_dir_size: u32 = self.current_offset - central_dir_offset;
 
-        // Write end of central directory record
+        // End of central directory record
         try self.writeEndOfCentralDirectory(
             @intCast(self.entries.items.len),
             central_dir_size,
@@ -277,77 +211,24 @@ pub const ZipWriter = struct {
 
     /// Write central directory header
     fn writeCentralDirectoryHeader(self: *ZipWriter, entry: ZipEntry) !void {
-        // Signature
-        try self.writer.writeInt(u32, ZIP_CENTRAL_DIR_HEADER_SIGNATURE, .little);
-        self.current_offset += 4;
-
-        // Version made by (2.0)
-        try self.writer.writeInt(u16, ZIP_VERSION_NEEDED, .little);
-        self.current_offset += 2;
-
-        // Version needed to extract
-        try self.writer.writeInt(u16, ZIP_VERSION_NEEDED, .little);
-        self.current_offset += 2;
-
-        // General purpose bit flag
-        try self.writer.writeInt(u16, FLAG_UTF8_ENCODING, .little);
-        self.current_offset += 2;
-
-        // Compression method
-        try self.writer.writeInt(u16, entry.compression_method, .little);
-        self.current_offset += 2;
-
-        // Last mod file time
-        try self.writer.writeInt(u16, entry.mod_time, .little);
-        self.current_offset += 2;
-
-        // Last mod file date  
-        try self.writer.writeInt(u16, entry.mod_date, .little);
-        self.current_offset += 2;
-
-        // CRC-32
-        try self.writer.writeInt(u32, entry.crc32, .little);
-        self.current_offset += 4;
-
-        // Compressed size
-        try self.writer.writeInt(u32, entry.compressed_size, .little);
-        self.current_offset += 4;
-
-        // Uncompressed size
-        try self.writer.writeInt(u32, entry.uncompressed_size, .little);
-        self.current_offset += 4;
-
-        // File name length
-        try self.writer.writeInt(u16, @intCast(entry.filename.len), .little);
-        self.current_offset += 2;
-
-        // Extra field length
-        try self.writer.writeInt(u16, 0, .little);
-        self.current_offset += 2;
-
-        // File comment length
-        try self.writer.writeInt(u16, 0, .little);
-        self.current_offset += 2;
-
-        // Disk number start
-        try self.writer.writeInt(u16, 0, .little);
-        self.current_offset += 2;
-
-        // Internal file attributes
-        try self.writer.writeInt(u16, 0, .little);
-        self.current_offset += 2;
-
-        // External file attributes
-        try self.writer.writeInt(u32, 0, .little);
-        self.current_offset += 4;
-
-        // Relative offset of local header
-        try self.writer.writeInt(u32, entry.offset, .little);
-        self.current_offset += 4;
-
-        // File name
-        try self.writer.writeAll(entry.filename);
-        self.current_offset += @intCast(entry.filename.len);
+        try self.wU32(ZIP_CENTRAL_DIR_HEADER_SIGNATURE);
+        try self.wU16(ZIP_VERSION_NEEDED); // version made by (keep 2.0)
+        try self.wU16(ZIP_VERSION_NEEDED); // version needed to extract
+        try self.wU16(FLAG_UTF8_ENCODING);
+        try self.wU16(entry.compression_method);
+        try self.wU16(entry.mod_time);
+        try self.wU16(entry.mod_date);
+        try self.wU32(entry.crc32);
+        try self.wU32(entry.compressed_size);
+        try self.wU32(entry.uncompressed_size);
+        try self.wU16(@intCast(entry.filename.len)); // file name length
+        try self.wU16(0); // extra field length
+        try self.wU16(0); // file comment length
+        try self.wU16(0); // disk number start
+        try self.wU16(0); // internal file attrs
+        try self.wU32(0); // external file attrs
+        try self.wU32(entry.offset); // relative offset of local header
+        try self.writeBytes(entry.filename); // file name
     }
 
     /// Write end of central directory record
@@ -357,46 +238,67 @@ pub const ZipWriter = struct {
         central_dir_size: u32,
         central_dir_offset: u32,
     ) !void {
-        // Signature
-        try self.writer.writeInt(u32, ZIP_END_OF_CENTRAL_DIR_SIGNATURE, .little);
+        try self.wU32(ZIP_END_OF_CENTRAL_DIR_SIGNATURE);
+        try self.wU16(0); // number of this disk
+        try self.wU16(0); // disk with start of central dir
+        try self.wU16(num_entries); // total entries on this disk
+        try self.wU16(num_entries); // total entries
+        try self.wU32(central_dir_size); // size of central directory
+        try self.wU32(central_dir_offset); // offset of start of central directory
+        try self.wU16(0); // zip file comment length
+    }
 
-        // Number of this disk
-        try self.writer.writeInt(u16, 0, .little);
+    // ----------------
+    // Private helpers
+    // ----------------
 
-        // Number of disk with start of central directory
-        try self.writer.writeInt(u16, 0, .little);
+    inline fn bump(self: *ZipWriter, add: u32) !void {
+        const new = self.current_offset + add;
+        if (new < self.current_offset) return ZipError.OffsetOverflow;
+        self.current_offset = new;
+    }
 
-        // Total number of entries on this disk
-        try self.writer.writeInt(u16, num_entries, .little);
+    inline fn wU16(self: *ZipWriter, v: u16) !void {
+        try self.writer.writeInt(u16, v, .little);
+        try self.bump(2);
+    }
 
-        // Total number of entries
-        try self.writer.writeInt(u16, num_entries, .little);
+    inline fn wU32(self: *ZipWriter, v: u32) !void {
+        try self.writer.writeInt(u32, v, .little);
+        try self.bump(4);
+    }
 
-        // Size of central directory
-        try self.writer.writeInt(u32, central_dir_size, .little);
-
-        // Offset of start of central directory
-        try self.writer.writeInt(u32, central_dir_offset, .little);
-
-        // ZIP file comment length
-        try self.writer.writeInt(u16, 0, .little);
+    inline fn writeBytes(self: *ZipWriter, bytes: []const u8) !void {
+        try self.writer.writeAll(bytes);
+        try self.bump(@intCast(bytes.len));
     }
 };
 
-/// Helper to create container.xml content
+/// Helper to create META-INF/container.xml content for MXL (OCF)
 pub fn createContainerXml(allocator: std.mem.Allocator, musicxml_path: []const u8) ![]u8 {
-    return std.fmt.allocPrint(
-        allocator,
-        \\<?xml version="1.0" encoding="UTF-8"?>
-        \\<container>
-        \\  <rootfiles>
-        \\    <rootfile full-path="{s}" media-type="application/vnd.recordare.musicxml+xml"/>
-        \\  </rootfiles>
-        \\</container>
-        \\
-    ,
-        .{musicxml_path},
-    );
+    _ = std.unicode.Utf8View.init(musicxml_path) catch return error.InvalidUtf8;
+
+    var buf = std.ArrayList(u8).init(allocator);
+    errdefer buf.deinit();
+
+    var xml = xml_mod.XmlWriter.init(allocator, buf.writer().any());
+    defer xml.deinit();
+
+    try xml.writeDeclaration();
+    try xml.startElement("container", &[_]xml_mod.Attribute{
+        .{ .name = "version", .value = "1.0" },
+        .{ .name = "xmlns", .value = "urn:oasis:names:tc:opendocument:xmlns:container" },
+    });
+
+    try xml.startElement("rootfiles", null);
+    try xml.writeEmptyElement("rootfile", &[_]xml_mod.Attribute{
+        .{ .name = "full-path", .value = musicxml_path },
+        .{ .name = "media-type", .value = "application/vnd.recordare.musicxml+xml" },
+    });
+    try xml.endElement(); // rootfiles
+    try xml.endElement(); // container
+
+    return buf.toOwnedSlice();
 }
 
 // Tests
@@ -408,7 +310,7 @@ test "CRC-32 calculation" {
     // Test with known values
     const test_data = "The quick brown fox jumps over the lazy dog";
     const crc = writer.calculateCrc32(test_data);
-    
+
     // This is the known CRC-32 for this string
     try std.testing.expectEqual(@as(u32, 0x414FA339), crc);
 }
@@ -426,7 +328,7 @@ test "create simple ZIP file" {
 
     // Verify ZIP structure
     const data = buffer.items;
-    
+
     // Check local file header signature
     const sig = std.mem.readInt(u32, data[0..4], .little);
     try std.testing.expectEqual(ZIP_LOCAL_FILE_HEADER_SIGNATURE, sig);
@@ -446,12 +348,12 @@ test "create MXL with container.xml" {
     // Add container.xml
     const container_content = try createContainerXml(std.testing.allocator, "score.xml");
     defer std.testing.allocator.free(container_content);
-    
+
     try writer.addFile("META-INF/container.xml", container_content, true);
-    
+
     // Add a dummy score
     try writer.addFile("score.xml", "<score-partwise version=\"4.0\"/>", true);
-    
+
     try writer.finalize();
 
     // Basic validation
@@ -470,7 +372,7 @@ test "compression performance" {
     const size = 1024 * 1024;
     const test_data = try std.testing.allocator.alloc(u8, size);
     defer std.testing.allocator.free(test_data);
-    
+
     // Fill with compressible pattern
     for (test_data, 0..) |*byte, i| {
         byte.* = @truncate(i % 256);
@@ -485,10 +387,10 @@ test "compression performance" {
     const mb_per_s = 1.0 / elapsed_s;
 
     log.debug("Compression performance: {d:.2} MB/s", .{mb_per_s});
-    
+
     // Should meet 20MB/s target
     try std.testing.expect(mb_per_s >= 20.0);
-    
+
     // Clean up the entry to avoid leak
     try writer.finalize();
 }
@@ -504,16 +406,16 @@ test "ZIP file ordering" {
     try writer.addFile("mimetype", "application/vnd.recordare.musicxml", false);
     try writer.addFile("META-INF/container.xml", "<container/>", true);
     try writer.addFile("score.xml", "<score/>", true);
-    
+
     try writer.finalize();
 
     // Verify mimetype is first and uncompressed
     const data = buffer.items;
-    
+
     // Skip to filename in first local header (at offset 30)
-    const first_filename = data[30..30 + 8];
+    const first_filename = data[30 .. 30 + 8];
     try std.testing.expectEqualStrings("mimetype", first_filename);
-    
+
     // Check compression method (at offset 8 in local header)
     const compression_method = std.mem.readInt(u16, data[8..10], .little);
     try std.testing.expectEqual(COMPRESSION_METHOD_STORE, compression_method);
