@@ -858,19 +858,18 @@ pub const Generator = struct {
     /// Generate measures from enhanced notes with educational metadata
     /// Helper function to check if chord groups have multiple voices
     fn hasMultipleVoices(chord_groups: []const chord_detector.ChordGroup) bool {
-        var voices_seen = std.bit_set.IntegerBitSet(8).initEmpty();
+        var first_voice: ?u8 = null;
 
         for (chord_groups) |group| {
             for (group.notes) |note| {
-                const voice = if (note.voice > 0) note.voice else 1;
-                voices_seen.set(voice);
-                // If we've seen more than one voice, return true
-                if (voices_seen.count() > 1) {
-                    return true;
+                const v: u8 = if (note.voice > 0) @intCast(note.voice) else 1;
+                if (first_voice) |fv| {
+                    if (v != fv) return true; // early exit on second distinct voice
+                } else {
+                    first_voice = v;
                 }
             }
         }
-
         return false;
     }
 
@@ -880,31 +879,38 @@ pub const Generator = struct {
         chord_groups: []const chord_detector.ChordGroup,
         start_index: usize,
         measure_state: *MeasureState,
-        notes_list: *containers.List(enhanced_note.EnhancedTimedNote),
+        notes_list: *std.ArrayList(enhanced_note.EnhancedTimedNote),
     ) !usize {
-        _ = self; // Currently unused
-        var chord_index = start_index;
+        _ = self; // unused
 
-        while (chord_index < chord_groups.len and !measure_state.isMeasureFull()) {
-            const chord_group = chord_groups[chord_index];
-            // Use first note's duration for measure tracking
-            const chord_duration = if (chord_group.notes.len > 0) chord_group.notes[0].duration else 0;
+        var i: usize = start_index;
+        while (i < chord_groups.len) {
+            // Preserve original "stop when measure is full" behavior.
+            if (measure_state.isMeasureFull()) break;
 
-            if (measure_state.canAddNote(chord_duration)) {
-                // Add all notes from this chord group to the list
-                for (chord_group.notes) |note| {
-                    const enhanced = enhanced_note.EnhancedTimedNote.init(note, null);
-                    try notes_list.append(enhanced);
-                }
-                measure_state.addNote(chord_duration);
-                chord_index += 1;
-            } else {
-                // Need to start new measure
-                break;
+            const group = chord_groups[i];
+
+            // Explicitly skip empty chord groups (no notes, no capacity impact).
+            if (group.notes.len == 0) {
+                i += 1;
+                continue;
             }
+
+            const chord_duration = group.notes[0].duration;
+
+            // Respect capacity decision based on the first note's duration.
+            if (!measure_state.canAddNote(chord_duration)) break;
+
+            // Append all notes from this chord group.
+            for (group.notes) |note| {
+                try notes_list.append(enhanced_note.EnhancedTimedNote.init(note, null));
+            }
+
+            measure_state.addNote(chord_duration);
+            i += 1;
         }
 
-        return chord_index;
+        return i;
     }
 
     /// TASK 4.1: Updated to use pre-detected global chords per CHORD_DETECTION_FIX_TASK_LIST.md lines 115-121
@@ -918,63 +924,50 @@ pub const Generator = struct {
         global_chords: ?[]const chord_detector.ChordGroup,
         key_fifths: i8,
     ) !void {
-        // Initialize measure state for 4/4 time (will be enhanced later)
+        // 4/4 initialization (as before)
         var measure_state = MeasureState.init(4, 4, self.divisions);
 
-        // TASK 4.1: Use pre-detected global chords or fall back to per-part detection for backward compatibility
-        // Implements TASK 4.1 per CHORD_DETECTION_FIX_TASK_LIST.md lines 119-120
+        // Use provided global chords or fall back to local detection (unchanged ownership rules)
         const chord_groups = if (global_chords) |chords| blk: {
-            // Use pre-detected global chords (cross-track chord detection)
             break :blk chords;
         } else blk: {
-            // Backward compatibility: Fall back to per-part chord detection
-            // Convert enhanced notes to timed notes for chord detection
             const timed_notes = try self.convertEnhancedToTimedNotes(enhanced_notes);
             defer self.allocator.free(timed_notes);
 
-            // Create chord detector and detect chords with 10 tick tolerance
             var detector = chord_detector.ChordDetector.init(self.allocator);
-            const detected_chords = try detector.detectChords(timed_notes, 10);
-            break :blk detected_chords;
+            const detected = try detector.detectChords(timed_notes, 10);
+            break :blk detected;
         };
 
-        // Only clean up chord groups if we created them locally (backward compatibility path)
-        // Global chords are owned by the pipeline and will be cleaned up there
+        // Only free if we allocated locally
         defer if (global_chords == null) {
-            // Cast to mutable for cleanup since we own these chords
             const mutable_chords = @constCast(chord_groups);
-            for (mutable_chords) |*group| {
-                group.deinit(self.allocator);
-            }
+            for (mutable_chords) |*group| group.deinit(self.allocator);
             self.allocator.free(mutable_chords);
         };
 
         var chord_index: usize = 0;
 
-        // CRITICAL SAFETY: Add loop iteration limits to prevent infinite loops
+        // Outer safety guard (unchanged)
         var measure_iterations: u32 = 0;
-        const max_measures: u32 = 10000; // Reasonable limit for any real music file
+        const max_measures: u32 = 10000;
 
         while (chord_index < chord_groups.len) {
-            // CRITICAL SAFETY: Prevent infinite loops in measure generation
             measure_iterations += 1;
             if (measure_iterations > max_measures) {
-                log.debug("SAFETY: Too many measures generated ({d}), breaking to prevent hang", .{max_measures});
+                std.debug.print("SAFETY: Too many measures generated ({d}), breaking to prevent hang\n", .{max_measures});
                 break;
             }
 
-            // Track starting position for progress check
             const start_chord_index = chord_index;
 
-            // BUG #2 FIX: Collect notes for this measure and check for multiple voices
-            var measure_notes = containers.List(enhanced_note.EnhancedTimedNote).init(self.allocator);
+            // Build the measure span once
+            var measure_notes = std.ArrayList(enhanced_note.EnhancedTimedNote).init(self.allocator);
             defer measure_notes.deinit();
 
-            // Create a temporary measure state to track what fits in this measure
             var temp_measure_state = MeasureState.init(4, 4, self.divisions);
             temp_measure_state.measure_number = measure_state.measure_number;
 
-            // Collect all notes that fit in this measure
             const next_chord_index = try self.collectMeasureNotes(
                 chord_groups,
                 chord_index,
@@ -982,22 +975,22 @@ pub const Generator = struct {
                 &measure_notes,
             );
 
-            // Check if we have multiple voices in this measure's notes
+            // Early-exit voice detection (clearer & safer than a tiny bitset)
             const measure_has_multiple_voices = blk: {
-                var voices_seen = std.bit_set.IntegerBitSet(8).initEmpty();
-                for (measure_notes.items) |note| {
-                    const voice = if (note.base_note.voice > 0) note.base_note.voice else 1;
-                    voices_seen.set(voice);
-                    if (voices_seen.count() > 1) {
-                        break :blk true;
+                var first_voice: ?u8 = null;
+                for (measure_notes.items) |nt| {
+                    const v: u8 = if (nt.base_note.voice > 0) @intCast(nt.base_note.voice) else 1;
+                    if (first_voice) |fv| {
+                        if (v != fv) break :blk true;
+                    } else {
+                        first_voice = v;
                     }
                 }
                 break :blk false;
             };
 
-            // BUG #2 FIX: Use voice-aware generation when multiple voices are detected
             if (measure_has_multiple_voices) {
-                // Use the voice-aware generation with backup elements
+                // Voice-aware generation remains unchanged
                 try self.generateMeasureWithVoices(
                     xml_writer,
                     measure_notes.items,
@@ -1007,93 +1000,83 @@ pub const Generator = struct {
                     tempo_bpm,
                 );
             } else {
-                // Use the original chord-based generation for single-voice measures
-                // Start new measure
+                // Single-voice: emit exactly the span we already computed.
                 try self.note_attr_generator.writeMeasureStart(xml_writer, measure_state.measure_number);
 
-                // Write attributes for first measure
                 if (measure_state.measure_number == 1) {
-                    try self.note_attr_generator.writeCompleteAttributes(xml_writer, measure_state.measure_number, true, true, key_fifths);
-
-                    // Add tempo marking
+                    try self.note_attr_generator.writeCompleteAttributes(
+                        xml_writer,
+                        measure_state.measure_number,
+                        true,
+                        true,
+                        key_fifths,
+                    );
                     try self.generateTempoMarking(xml_writer, tempo_bpm);
                 }
 
-                // Fill measure with chord groups
-                var note_iterations: u32 = 0;
-                const max_notes_per_measure: u32 = 1000; // Reasonable limit
-
-                while (chord_index < chord_groups.len and !measure_state.isMeasureFull()) {
-                    // CRITICAL SAFETY: Prevent infinite loops within measure
-                    note_iterations += 1;
-                    if (note_iterations > max_notes_per_measure) {
-                        log.debug("SAFETY: Too many notes processed in measure, breaking", .{});
-                        break;
-                    }
-                    const chord_group = chord_groups[chord_index];
-                    // Use first note's duration for measure tracking (all notes in chord have same duration)
-                    const chord_duration = if (chord_group.notes.len > 0) chord_group.notes[0].duration else 0;
-
-                    if (measure_state.canAddNote(chord_duration)) {
-                        // Generate the chord group
-                        try self.generateChordGroup(xml_writer, chord_group, true);
-                        measure_state.addNote(chord_duration);
-                        chord_index += 1;
-                    } else {
-                        // Need to start new measure
-                        break;
-                    }
+                // No second capacity loop: just generate [chord_index .. next_chord_index)
+                var i: usize = chord_index;
+                while (i < next_chord_index) : (i += 1) {
+                    const group = chord_groups[i];
+                    if (group.notes.len == 0) continue; // no-op groups
+                    try self.generateChordGroup(xml_writer, group, true);
+                    // Keep measure_state’s total aligned (used for rest logic in original)
+                    measure_state.addNote(group.notes[0].duration);
                 }
 
-                // Fill remaining space with rest if measure is not full
-                if (!measure_state.isMeasureFull()) {
-                    const remaining_duration = measure_state.getRemainingDuration();
-
-                    // CRITICAL: Only generate rest for meaningful remainders per EXECUTIVE AUTHORITY fix
-                    // Tiny remainders absorbed as timing tolerance, not amplified to full musical rests
-                    const min_rest_threshold = self.divisions / 8; // Minimum 32nd note
-                    if (remaining_duration >= min_rest_threshold) {
-                        try self.generateRestElement(xml_writer, remaining_duration);
-                        measure_state.addNote(remaining_duration);
-                    }
-                    // Tiny remainders absorbed as timing tolerance
+                // Compute remainder from the same temporary state used to pick the span
+                const remaining_duration = temp_measure_state.getRemainingDuration();
+                const min_rest_threshold = self.divisions / 8; // 32nd-note minimum
+                if (remaining_duration >= min_rest_threshold) {
+                    try self.generateRestElement(xml_writer, remaining_duration);
+                    measure_state.addNote(remaining_duration);
                 }
 
-                // Add barline
                 try self.note_attr_generator.writeBarline(xml_writer);
-
                 try xml_writer.endElement(); // measure
             }
 
-            // Update chord_index to the next position
+            // Advance by the span we collected
             chord_index = next_chord_index;
 
-            // Prepare for next measure
+            // Next measure
             measure_state.startNewMeasure();
 
-            // Check if we made progress in this iteration
+            // Progress safety fallback (unchanged)
             if (chord_index == start_chord_index and chord_index < chord_groups.len) {
-                // No progress made - force advance to prevent infinite loop
                 chord_index += 1;
             }
         }
     }
 
     /// Determine note type from duration in divisions
+    // Exact, integer-only mapping (no floating point).
+    // Keeps the same signature and return values as your current function.
     fn determineNoteType(self: *const Generator, duration: u32) ![]const u8 {
-        // Calculate ratio relative to quarter note
-        const ratio = @as(f64, @floatFromInt(duration)) / @as(f64, @floatFromInt(self.divisions));
+        // Based on half-way thresholds between standard note lengths
+        // relative to a quarter note. We avoid floats by cross-multiplying.
+        const d: u64 = duration;
+        const div: u64 = self.divisions;
+        const three_div: u64 = 3 * div;
 
-        // Map to closest standard note type
-        if (ratio >= 6.0) return "breve";
-        if (ratio >= 3.0) return "whole";
-        if (ratio >= 1.5) return "half";
-        if (ratio >= 0.75) return "quarter";
-        if (ratio >= 0.375) return "eighth";
-        if (ratio >= 0.1875) return "16th";
-        if (ratio >= 0.09375) return "32nd";
-        if (ratio >= 0.046875) return "64th";
-        if (ratio >= 0.0234375) return "128th";
+        // >= 6.0 quarters  -> breve
+        if (d >= 6 * div) return "breve";
+        // >= 3.0 quarters  -> whole
+        if (d >= 3 * div) return "whole";
+        // >= 1.5 quarters  -> half       (2d >= 3div)
+        if (2 * d >= three_div) return "half";
+        // >= 0.75 quarters -> quarter    (4d >= 3div)
+        if (4 * d >= three_div) return "quarter";
+        // >= 0.375         -> eighth     (8d >= 3div)
+        if (8 * d >= three_div) return "eighth";
+        // >= 0.1875        -> 16th       (16d >= 3div)
+        if (16 * d >= three_div) return "16th";
+        // >= 0.09375       -> 32nd       (32d >= 3div)
+        if (32 * d >= three_div) return "32nd";
+        // >= 0.046875      -> 64th       (64d >= 3div)
+        if (64 * d >= three_div) return "64th";
+        // >= 0.0234375     -> 128th      (128d >= 3div)
+        if (128 * d >= three_div) return "128th";
         return "256th";
     }
 
@@ -1372,25 +1355,15 @@ pub const Generator = struct {
         try xml_writer.startElement("direction-type", null);
         try xml_writer.startElement("dynamics", null);
 
-        // Convert dynamic marking to MusicXML element name
-        const dynamic_element = switch (marking.dynamic) {
-            .ppp => "ppp",
-            .pp => "pp",
-            .p => "p",
-            .mp => "mp",
-            .mf => "mf",
-            .f => "f",
-            .ff => "ff",
-            .fff => "fff",
-        };
-
+        // Use enum tag directly as XML element name
+        const dynamic_element = std.meta.tagName(marking.dynamic);
         try xml_writer.startElement(dynamic_element, null);
         try xml_writer.endElement(); // dynamic element
 
         try xml_writer.endElement(); // dynamics
         try xml_writer.endElement(); // direction-type
 
-        // Add sound element for playback with MIDI velocity
+        // Add <sound dynamics="..."> for playback velocity
         var velocity_buf: [8]u8 = undefined;
         const velocity_str = try std.fmt.bufPrint(&velocity_buf, "{d}", .{marking.dynamic.toMidiValue()});
         try xml_writer.startElement("sound", &[_]Attribute{
@@ -1420,59 +1393,78 @@ pub const Generator = struct {
 
         // Generate basic note content
         if (is_rest) {
-            try xml_writer.startElement("rest", null);
-            try xml_writer.endElement(); // rest
+            // Simpler: empty element instead of start+end
+            try xml_writer.writeEmptyElement("rest", null);
         } else {
             const pitch = midiToPitch(base_note.note);
             try xml_writer.startElement("pitch", null);
             try xml_writer.writeElement("step", pitch.step, null);
 
             if (pitch.alter != 0) {
-                try xmlh.writeIntElement(xml_writer, "alter", pitch.alter);
+                var alter_buf: [8]u8 = undefined;
+                const alter_str = try std.fmt.bufPrint(&alter_buf, "{d}", .{pitch.alter});
+                try xml_writer.writeElement("alter", alter_str, null);
             }
 
-            try xmlh.writeIntElement(xml_writer, "octave", pitch.octave);
+            var octave_buf: [8]u8 = undefined;
+            const octave_str = try std.fmt.bufPrint(&octave_buf, "{d}", .{pitch.octave});
+            try xml_writer.writeElement("octave", octave_str, null);
 
             try xml_writer.endElement(); // pitch
         }
 
-        // Write duration - CRITICAL FIX: Use actual duration without aggressive quantization
-        // Convert MIDI ticks to MusicXML divisions
-        const duration_in_divisions = try conversion_utils.convertTicksOrSame(base_note.duration, self.division_converter);
+        // Convert MIDI ticks to MusicXML divisions (unchanged behavior)
+        const duration_in_divisions = if (self.division_converter) |converter|
+            try converter.convertTicksToDivisions(base_note.duration)
+        else
+            base_note.duration;
 
-        // Write the actual duration without forcing to standard note values
-        // This preserves the exact rhythms from the MIDI file for educational accuracy
-        try xmlh.writeIntElement(xml_writer, "duration", duration_in_divisions);
+        // Write the actual duration (no forced quantization)
+        var duration_buf: [32]u8 = undefined;
+        const duration_str = try std.fmt.bufPrint(&duration_buf, "{d}", .{duration_in_divisions});
+        try xml_writer.writeElement("duration", duration_str, null);
+
+        // Compute staff once and reuse for both voice mapping and <staff>
+        const staff_opt: ?u8 = if (!is_rest)
+            @import("note_attributes.zig").getStaffForNote(base_note.note)
+        else
+            null;
+
+        const staff_number: u8 = if (staff_opt) |s| s else 1;
 
         // Write voice with piano convention mapping
-        const staff_number = if (!is_rest) @import("note_attributes.zig").getStaffForNote(base_note.note) else 1;
-        const raw_voice = if (base_note.voice > 0) base_note.voice else 1;
-        const mapped_voice = @import("note_attributes.zig").mapVoiceForPiano(raw_voice, staff_number);
-        try xmlh.writeIntElement(xml_writer, "voice", mapped_voice);
+        const raw_voice_i = if (base_note.voice > 0) base_note.voice else 1;
+        const mapped_voice = @import("note_attributes.zig").mapVoiceForPiano(raw_voice_i, staff_number);
+        var voice_buf: [8]u8 = undefined;
+        const voice_str = try std.fmt.bufPrint(&voice_buf, "{d}", .{mapped_voice});
+        try xml_writer.writeElement("voice", voice_str, null);
 
-        // Determine note type based on duration
+        // Determine note type based on duration (integer-only version recommended earlier)
         const note_type = try self.determineNoteType(duration_in_divisions);
         try xml_writer.writeElement("type", note_type, null);
 
-        // Write staff assignment based on pitch
+        // Write staff assignment for pitched notes
         if (!is_rest) {
-            const staff = @import("note_attributes.zig").getStaffForNote(base_note.note);
-            try xmlh.writeIntElement(xml_writer, "staff", staff);
+            var staff_buf: [8]u8 = undefined;
+            const staff_str = try std.fmt.bufPrint(&staff_buf, "{d}", .{staff_number});
+            try xml_writer.writeElement("staff", staff_str, null);
         }
 
-        // Generate tuplet information if present
+        // Tuplet handling (same semantics; start takes precedence over stop)
         if (enhanced.tuplet_info) |tuplet_info| {
             if (tuplet_info.isValid()) {
-                // Generate time-modification element for tuplet
                 try xml_writer.startElement("time-modification", null);
 
-                try xmlh.writeIntElement(xml_writer, "actual-notes", tuplet_info.tuplet_type.getActualCount());
+                var actual_buf: [8]u8 = undefined;
+                const actual_str = try std.fmt.bufPrint(&actual_buf, "{d}", .{tuplet_info.tuplet_type.getActualCount()});
+                try xml_writer.writeElement("actual-notes", actual_str, null);
 
-                try xmlh.writeIntElement(xml_writer, "normal-notes", tuplet_info.tuplet_type.getNormalCount());
+                var normal_buf: [8]u8 = undefined;
+                const normal_str = try std.fmt.bufPrint(&normal_buf, "{d}", .{tuplet_info.tuplet_type.getNormalCount()});
+                try xml_writer.writeElement("normal-notes", normal_str, null);
 
                 try xml_writer.endElement(); // time-modification
 
-                // Generate tuplet bracket notation if starting or ending tuplet
                 if (tuplet_info.starts_tuplet) {
                     try xml_writer.startElement("notations", null);
                     try xml_writer.startElement("tuplet", &[_]Attribute{
@@ -1494,47 +1486,24 @@ pub const Generator = struct {
             }
         }
 
-        // Generate stem direction for pitched notes
+        // Stem direction for pitched notes (unchanged logic)
         if (!is_rest) {
-            // Use stem info if available, otherwise calculate default
             if (enhanced.stem_info) |stem_info| {
                 const stem_str = stem_info.direction.toMusicXML();
                 try xml_writer.writeElement("stem", stem_str, null);
             } else {
-                // Default stem direction calculation
                 const stem_dir = stem_direction.StemDirectionCalculator.calculateVoiceAwareStemDirection(base_note.note, 1);
                 try xml_writer.writeElement("stem", stem_dir.toMusicXML(), null);
             }
         }
 
-        // Generate beam information for beamable notes
+        // Beam information: simpler, no switch duplication
         if (enhanced.beaming_info) |beam_info| {
             if (beam_info.can_beam and beam_info.beam_state != .none) {
-                // Generate beam elements based on beam state
-                switch (beam_info.beam_state) {
-                    .begin => {
-                        try xml_writer.startElement("beam", &[_]Attribute{
-                            .{ .name = "number", .value = "1" },
-                        });
-                        try xml_writer.writeText("begin");
-                        try xml_writer.endElement(); // beam
-                    },
-                    .@"continue" => {
-                        try xml_writer.startElement("beam", &[_]Attribute{
-                            .{ .name = "number", .value = "1" },
-                        });
-                        try xml_writer.writeText("continue");
-                        try xml_writer.endElement(); // beam
-                    },
-                    .end => {
-                        try xml_writer.startElement("beam", &[_]Attribute{
-                            .{ .name = "number", .value = "1" },
-                        });
-                        try xml_writer.writeText("end");
-                        try xml_writer.endElement(); // beam
-                    },
-                    .none => {},
-                }
+                const beam_text = std.meta.tagName(beam_info.beam_state); // "begin","continue","end"
+                try xml_writer.writeElement("beam", beam_text, &[_]Attribute{
+                    .{ .name = "number", .value = "1" },
+                });
             }
         }
 
@@ -1551,66 +1520,22 @@ pub const Generator = struct {
     ) !void {
         if (chord_group.notes.len == 0) return;
 
-        // First note in chord is written normally (establishes duration/voice)
+        // First note in chord is written without <chord/> (establishes duration/voice)
         if (is_enhanced) {
-            // Convert first note to enhanced note for generation
             const first_enhanced = enhanced_note.EnhancedTimedNote.init(chord_group.notes[0], null);
             try self.generateEnhancedNoteElement(xml_writer, &first_enhanced, false);
         } else {
-            const first_note = chord_group.notes[0];
-            // Calculate staff assignment individually for first note
-            const staff_number = @import("note_attributes.zig").getStaffForNote(first_note.note);
-            try self.generateNoteElementWithAttributes(xml_writer, first_note.note, first_note.duration, false, // not a rest
-                1, // default voice
-                staff_number);
+            // Preserve legacy behavior: first note uses voice = 1 in the non-enhanced path
+            var first_note = chord_group.notes[0];
+            first_note.voice = 1;
+            const first_enhanced = enhanced_note.EnhancedTimedNote.init(first_note, null);
+            try self.generateEnhancedNoteElement(xml_writer, &first_enhanced, false);
         }
 
-        // Remaining notes in chord need <chord/> element
+        // Remaining notes in chord need <chord/>; reuse the same generator
         for (chord_group.notes[1..]) |note| {
-            try xml_writer.startElement("note", null);
-
-            // CRITICAL: <chord/> element indicates this note is simultaneous with previous
-            try xml_writer.writeEmptyElement("chord", null);
-
-            // Generate pitch
-            const pitch = midiToPitch(note.note);
-            try xml_writer.startElement("pitch", null);
-            try xml_writer.writeElement("step", pitch.step, null);
-
-            if (pitch.alter != 0) {
-                try xmlh.writeIntElement(xml_writer, "alter", pitch.alter);
-            }
-
-            try xmlh.writeIntElement(xml_writer, "octave", pitch.octave);
-
-            try xml_writer.endElement(); // pitch
-
-            // Duration (must match first note in chord)
-            // TIMING-2.3 FIX: Convert MIDI ticks to MusicXML divisions
-            const duration_in_divisions = try conversion_utils.convertTicksOrSame(note.duration, self.division_converter);
-
-            try xmlh.writeIntElement(xml_writer, "duration", duration_in_divisions);
-
-            // Staff assignment - calculate individually for each note
-            const staff_number = @import("note_attributes.zig").getStaffForNote(note.note);
-
-            // Voice with piano convention mapping
-            const raw_voice = if (note.voice > 0) note.voice else 1;
-            const mapped_voice = @import("note_attributes.zig").mapVoiceForPiano(raw_voice, staff_number);
-            try xmlh.writeIntElement(xml_writer, "voice", mapped_voice);
-
-            // Type
-            const note_type = try self.determineNoteType(duration_in_divisions);
-            try xml_writer.writeElement("type", note_type, null);
-
-            // Staff element
-            try xmlh.writeIntElement(xml_writer, "staff", staff_number);
-
-            // Stem direction (should match first note)
-            const stem_dir = stem_direction.StemDirectionCalculator.calculateVoiceAwareStemDirection(note.note, 1);
-            try xml_writer.writeElement("stem", stem_dir.toMusicXML(), null);
-
-            try xml_writer.endElement(); // note
+            const enh = enhanced_note.EnhancedTimedNote.init(note, null);
+            try self.generateEnhancedNoteElement(xml_writer, &enh, true);
         }
     }
 

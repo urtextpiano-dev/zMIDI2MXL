@@ -1,0 +1,21 @@
+{
+  "baseline_date": "2025-01-11",
+  "zig_version": "0.14.0",
+  "platform": "Windows WSL2",
+  "test_file": "Sweden_Minecraft.mid",
+  "performance": {
+    "total_time_ms": 10,
+    "notes_processed": 87,
+    "time_per_note_ns": 468,
+    "median_per_note_ns": 468,
+    "mxl_size_bytes": 2916,
+    "musicxml_size_bytes": 82833
+  },
+  "hot_paths": {
+    "parseVlq": "< 10ns target",
+    "parseNextEvent": "inner loop",
+    "convertMidiToMxl": "main conversion"
+  },
+  "mxl_hash": "TO_BE_COMPUTED",
+  "binary_hash": "TO_BE_COMPUTED"
+}
