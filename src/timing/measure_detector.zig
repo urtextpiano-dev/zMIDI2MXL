@@ -14,6 +14,7 @@
 //! References MXL_Architecture_Reference.md Section 5.4 lines per TASK-025
 
 const std = @import("std");
+const containers = @import("../utils/containers.zig");
 const timing = @import("division_converter.zig");
 const midi_parser = @import("../midi/parser.zig");
 const error_mod = @import("../error.zig");
@@ -71,7 +72,7 @@ pub const Measure = struct {
     /// Time signature active for this measure
     time_signature: midi_parser.TimeSignatureEvent,
     /// Notes that start and end within this measure
-    notes: std.ArrayList(TimedNote),
+    notes: containers.List(TimedNote),
     
     /// Initialize a new measure
     pub fn init(allocator: std.mem.Allocator, number: u32, start_tick: u32, end_tick: u32, time_signature: midi_parser.TimeSignatureEvent) Measure {
@@ -80,7 +81,7 @@ pub const Measure = struct {
             .start_tick = start_tick,
             .end_tick = end_tick,
             .time_signature = time_signature,
-            .notes = std.ArrayList(TimedNote).init(allocator),
+            .notes = containers.List(TimedNote).init(allocator),
         };
     }
     
@@ -146,13 +147,13 @@ pub const MeasureBoundaryDetector = struct {
         self: *const MeasureBoundaryDetector,
         notes: []const TimedNote,
         time_signatures: []const midi_parser.TimeSignatureEvent
-    ) (MeasureBoundaryError || std.mem.Allocator.Error)!std.ArrayList(Measure) {
+    ) (MeasureBoundaryError || std.mem.Allocator.Error)!containers.List(Measure) {
         
         if (time_signatures.len == 0) {
             return MeasureBoundaryError.NoTimeSignature;
         }
         
-        var measures = std.ArrayList(Measure).init(self.allocator);
+        var measures = containers.List(Measure).init(self.allocator);
         errdefer {
             // Clean up measures on error
             for (measures.items) |*measure| {

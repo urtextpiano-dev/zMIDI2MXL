@@ -1,5 +1,6 @@
 const std = @import("std");
-const testing = std.testing;
+const t = @import("../../src/test_utils.zig");
+// Removed: const testing = std.testing;
 
 // ===== MINIMAL MOCKS AND DEPENDENCIES =====
 
@@ -130,8 +131,8 @@ test "applyOptimizedRests - no rests in notes" {
     try applyOptimizedRests(&processor, &notes, &optimized_rests);
     
     // No notes should have rest info since they have non-zero velocity
-    try testing.expect(notes[0].rest_info == null);
-    try testing.expect(notes[1].rest_info == null);
+    try t.expect\1notes[0].rest_info == null);
+    try t.expect\1notes[1].rest_info == null);
 }
 
 test "applyOptimizedRests - rest note gets optimized" {
@@ -148,11 +149,11 @@ test "applyOptimizedRests - rest note gets optimized" {
     try applyOptimizedRests(&processor, &notes, &optimized_rests);
     
     // Rest note should have been optimized
-    try testing.expect(notes[0].rest_info != null);
-    try testing.expect(notes[0].rest_info.?.is_optimized_rest == true);
-    try testing.expect(notes[0].rest_info.?.original_duration == 200);
-    try testing.expect(notes[0].rest_info.?.alignment_score == 0.8);
-    try testing.expect(notes[0].base_note.duration == 240); // Duration updated
+    try t.expect\1notes[0].rest_info != null);
+    try t.expect\1notes[0].rest_info.?.is_optimized_rest == true);
+    try t.expect\1notes[0].rest_info.?.original_duration == 200);
+    try t.expect\1notes[0].rest_info.?.alignment_score == 0.8);
+    try t.expect\1notes[0].base_note.duration == 240); // Duration updated
 }
 
 test "applyOptimizedRests - multiple rests with partial overlap" {
@@ -172,15 +173,15 @@ test "applyOptimizedRests - multiple rests with partial overlap" {
     try applyOptimizedRests(&processor, &notes, &optimized_rests);
     
     // First note overlaps with first optimized rest
-    try testing.expect(notes[0].rest_info != null);
-    try testing.expect(notes[0].rest_info.?.alignment_score == 0.5);
+    try t.expect\1notes[0].rest_info != null);
+    try t.expect\1notes[0].rest_info.?.alignment_score == 0.5);
     
     // Second note overlaps with second optimized rest
-    try testing.expect(notes[1].rest_info != null);
-    try testing.expect(notes[1].rest_info.?.alignment_score == 0.9);
+    try t.expect\1notes[1].rest_info != null);
+    try t.expect\1notes[1].rest_info.?.alignment_score == 0.9);
     
     // Third note doesn't overlap with any optimized rest (400 >= 360)
-    try testing.expect(notes[2].rest_info == null);
+    try t.expect\1notes[2].rest_info == null);
 }
 
 test "applyOptimizedRests - rest at exact boundary" {
@@ -198,10 +199,10 @@ test "applyOptimizedRests - rest at exact boundary" {
     try applyOptimizedRests(&processor, &notes, &optimized_rests);
     
     // First note should be optimized
-    try testing.expect(notes[0].rest_info != null);
+    try t.expect\1notes[0].rest_info != null);
     
     // Second note at exact boundary (200 >= 200 is false in the condition)
-    try testing.expect(notes[1].rest_info == null);
+    try t.expect\1notes[1].rest_info == null);
 }
 
 test "applyOptimizedRests - mixed notes and rests" {
@@ -222,17 +223,17 @@ test "applyOptimizedRests - mixed notes and rests" {
     try applyOptimizedRests(&processor, &notes, &optimized_rests);
     
     // Non-rest notes should not be affected
-    try testing.expect(notes[0].rest_info == null);
-    try testing.expect(notes[2].rest_info == null);
+    try t.expect\1notes[0].rest_info == null);
+    try t.expect\1notes[2].rest_info == null);
     
     // Rest notes should be optimized
-    try testing.expect(notes[1].rest_info != null);
-    try testing.expect(notes[1].rest_info.?.alignment_score == 1.0);
-    try testing.expect(notes[1].base_note.duration == 240); // Duration unchanged
+    try t.expect\1notes[1].rest_info != null);
+    try t.expect\1notes[1].rest_info.?.alignment_score == 1.0);
+    try t.expect\1notes[1].base_note.duration == 240); // Duration unchanged
     
-    try testing.expect(notes[3].rest_info != null);
-    try testing.expect(notes[3].rest_info.?.alignment_score == 0.95);
-    try testing.expect(notes[3].base_note.duration == 480); // Duration updated
+    try t.expect\1notes[3].rest_info != null);
+    try t.expect\1notes[3].rest_info.?.alignment_score == 0.95);
+    try t.expect\1notes[3].base_note.duration == 480); // Duration updated
 }
 
 // ===== MAIN FUNCTION FOR TESTING =====

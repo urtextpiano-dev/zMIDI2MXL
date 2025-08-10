@@ -1,5 +1,6 @@
 const std = @import("std");
-const testing = std.testing;
+const t = @import("../../src/test_utils.zig");
+// Removed: const testing = std.testing;
 
 // Mock structures needed for the function
 const RestInfo = struct {
@@ -218,9 +219,9 @@ test "adjustRestPlacementForBeamConsistency resets optimization flag" {
         .is_optimized_rest = true,
     };
     
-    try testing.expect(rest_info.is_optimized_rest == true);
+    try t.expect\1rest_info.is_optimized_rest == true);
     try processor.adjustRestPlacementForBeamConsistency(rest_span, &enhanced_notes);
-    try testing.expect(rest_info.is_optimized_rest == false);
+    try t.expect\1rest_info.is_optimized_rest == false);
 }
 
 test "adjustRestPlacementForBeamConsistency handles null rest_info" {
@@ -314,9 +315,9 @@ test "adjustRestPlacementForBeamConsistency processes multiple indices" {
     try processor.adjustRestPlacementForBeamConsistency(rest_span, &enhanced_notes);
     
     // All should be reset to false
-    try testing.expect(rest_info1.is_optimized_rest == false);
-    try testing.expect(rest_info2.is_optimized_rest == false);
-    try testing.expect(rest_info3.is_optimized_rest == false);
+    try t.expect\1rest_info1.is_optimized_rest == false);
+    try t.expect\1rest_info2.is_optimized_rest == false);
+    try t.expect\1rest_info3.is_optimized_rest == false);
 }
 
 test "adjustRestPlacementForBeamConsistency handles empty indices" {

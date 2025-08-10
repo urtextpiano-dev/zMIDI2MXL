@@ -1,5 +1,6 @@
 const std = @import("std");
-const testing = std.testing;
+const t = @import("../../src/test_utils.zig");
+// Removed: const testing = std.testing;
 
 // Mock structures needed for the function
 
@@ -330,7 +331,7 @@ test "buildTupletSpans - no tuplets" {
         span.deinit();
     }
     
-    try testing.expectEqual(@as(usize, 0), result.len);
+    try t.expectEq(@as(usize, 0), result.len);
 }
 
 test "buildTupletSpans - single tuplet" {
@@ -364,10 +365,10 @@ test "buildTupletSpans - single tuplet" {
         span.deinit();
     };
     
-    try testing.expectEqual(@as(usize, 1), result.len);
-    try testing.expectEqual(@as(u32, 0), result[0].start_tick);
-    try testing.expectEqual(@as(u32, 240), result[0].end_tick);
-    try testing.expectEqual(@as(usize, 2), result[0].note_indices.items.len);
+    try t.expectEq(@as(usize, 1), result.len);
+    try t.expectEq(@as(u32, 0), result[0].start_tick);
+    try t.expectEq(@as(u32, 240), result[0].end_tick);
+    try t.expectEq(@as(usize, 2), result[0].note_indices.items.len);
 }
 
 test "buildTupletSpans - multiple separate tuplets" {
@@ -411,9 +412,9 @@ test "buildTupletSpans - multiple separate tuplets" {
         span.deinit();
     };
     
-    try testing.expectEqual(@as(usize, 2), result.len);
-    try testing.expectEqual(@as(u32, 0), result[0].start_tick);
-    try testing.expectEqual(@as(u32, 480), result[1].start_tick);
+    try t.expectEq(@as(usize, 2), result.len);
+    try t.expectEq(@as(u32, 0), result[0].start_tick);
+    try t.expectEq(@as(u32, 480), result[1].start_tick);
 }
 
 test "buildTupletSpans - edge case empty input" {
@@ -429,5 +430,5 @@ test "buildTupletSpans - edge case empty input" {
     const result = try processor.buildTupletSpans(&notes);
     defer testing.allocator.free(result);
     
-    try testing.expectEqual(@as(usize, 0), result.len);
+    try t.expectEq(@as(usize, 0), result.len);
 }

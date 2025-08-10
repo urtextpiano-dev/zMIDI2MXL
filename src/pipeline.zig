@@ -8,6 +8,9 @@
 //! VoicedNote[] → MeasureBoundaryDetector → Measure[] → MusicXML Generator → .mxl File
 
 const std = @import("std");
+const containers = @import("utils/containers.zig");
+const log = @import("utils/log.zig");
+const error_helpers = @import("utils/error_helpers.zig");
 
 // Core modules
 const midi_parser = @import("midi/parser.zig");
@@ -17,6 +20,7 @@ const voice_allocation = @import("voice_allocation.zig");
 const mxl_generator = @import("mxl/generator.zig");
 const note_attributes = @import("mxl/note_attributes.zig");
 const error_mod = @import("error.zig");
+const binary_reader = @import("utils/binary_reader.zig");
 
 // Educational processing infrastructure
 const arena_mod = @import("memory/arena.zig");
@@ -31,15 +35,15 @@ const chord_detector = @import("harmony/chord_detector.zig");
 /// Implements TASK 2.1 per CHORD_DETECTION_FIX_TASK_LIST.md Section 2 lines 50-63
 pub const GlobalNoteCollector = struct {
     allocator: std.mem.Allocator,
-    all_notes: std.ArrayList(timing.TimedNote),
-    track_to_part_map: std.AutoHashMap(u8, usize),
+    all_notes: containers.List(timing.TimedNote),
+    track_to_part_map: containers.AutoMap(u8, usize),
     
     /// Initialize the global note collector
     pub fn init(allocator: std.mem.Allocator) GlobalNoteCollector {
         return GlobalNoteCollector{
             .allocator = allocator,
-            .all_notes = std.ArrayList(timing.TimedNote).init(allocator),
-            .track_to_part_map = std.AutoHashMap(u8, usize).init(allocator),
+            .all_notes = containers.List(timing.TimedNote).init(allocator),
+            .track_to_part_map = containers.AutoMap(u8, usize).init(allocator),
         };
     }
     
@@ -47,26 +51,26 @@ pub const GlobalNoteCollector = struct {
     /// This enables cross-track chord detection by gathering all notes with track information preserved
     pub fn collectFromAllParts(self: *GlobalNoteCollector, container: *const multi_track.MultiTrackContainer) !void {
         // DEBUG FIX-002: Add debug tracing within GlobalNoteCollector
-        std.debug.print("DEBUG FIX-002: [COLLECTOR METHOD] - collectFromAllParts called with {} parts, {} tracks\n", .{container.parts.items.len, container.tracks.items.len});
+        log.tag("FIX-002:COLLECTOR", "collectFromAllParts called with {} parts, {} tracks", .{container.parts.items.len, container.tracks.items.len});
         
         // Clear any existing data
         self.all_notes.clearRetainingCapacity();
         self.track_to_part_map.clearRetainingCapacity();
         
         // Build track-to-part mapping first
-        std.debug.print("DEBUG FIX-002: [MAPPING BUILD] - Building track-to-part mapping\n", .{});
+        log.tag("FIX-002:MAPPING", "Building track-to-part mapping", .{});
         for (container.parts.items, 0..) |part, part_idx| {
-            std.debug.print("DEBUG FIX-002: [PART {}] - Part {} has {} track indices\n", .{part_idx, part_idx, part.track_indices.items.len});
+            log.tag("FIX-002:PART", "Part {} has {} track indices", .{part_idx, part.track_indices.items.len});
             for (part.track_indices.items) |track_idx| {
                 try self.track_to_part_map.put(@intCast(track_idx), part_idx);
             }
         }
-        std.debug.print("DEBUG FIX-002: [MAPPING COMPLETE] - Built mapping for {} track-part associations\n", .{self.track_to_part_map.count()});
+        log.tag("FIX-002:MAPPING", "Built mapping for {} track-part associations", .{self.track_to_part_map.count()});
         
         // Collect all notes from all tracks, preserving track information
-        std.debug.print("DEBUG FIX-002: [NOTE COLLECTION] - Starting note collection from tracks\n", .{});
+        log.tag("FIX-002:COLLECTION", "Starting note collection from tracks", .{});
         for (container.tracks.items, 0..) |track, track_idx| {
-            std.debug.print("DEBUG FIX-002: [TRACK {}] - Processing track {} with {} note events\n", .{track_idx, track_idx, track.note_events.items.len});
+            log.tag("FIX-002:TRACK", "Processing track {} with {} note events", .{track_idx, track.note_events.items.len});
             
             // Convert NoteEvents to TimedNotes using the same logic as Pipeline.convertToTimedNotes
             var duration_tracker = midi_parser.NoteDurationTracker.init(self.allocator);
@@ -81,7 +85,7 @@ pub const GlobalNoteCollector = struct {
             
             // Get completed notes from the tracker
             const completed_notes = duration_tracker.completed_notes.items;
-            std.debug.print("DEBUG FIX-002: [TRACK {} NOTES] - Track {} produced {} completed notes\n", .{track_idx, track_idx, completed_notes.len});
+            log.tag("FIX-002:TRACK", "Track {} produced {} completed notes", .{track_idx, completed_notes.len});
             
             // Convert to TimedNote format and add to collection
             for (completed_notes) |note| {
@@ -99,12 +103,12 @@ pub const GlobalNoteCollector = struct {
             }
         }
         
-        std.debug.print("DEBUG FIX-002: [COLLECTION TOTAL] - Collected {} total notes before sorting\n", .{self.all_notes.items.len});
+        log.tag("FIX-002:COLLECTION", "Collected {} total notes before sorting", .{self.all_notes.items.len});
         
         // Sort all notes by start_tick for efficient chord detection
         std.sort.pdq(timing.TimedNote, self.all_notes.items, {}, compareTimedNotesByStartTick);
         
-        std.debug.print("DEBUG FIX-002: [COLLECTION FINAL] - Final collection: {} notes sorted by start_tick\n", .{self.all_notes.items.len});
+        log.tag("FIX-002:COLLECTION", "Final collection: {} notes sorted by start_tick", .{self.all_notes.items.len});
     }
     
     /// Clean up resources
@@ -268,7 +272,7 @@ pub const Pipeline = struct {
     /// Implements TASK-VL-008 per VERBOSE_LOGGING_TASK_LIST.md Section 8 lines 338-367
     pub fn convertMidiToMxl(self: *Pipeline, midi_data: []const u8) !PipelineResult {
         // DEBUG FIX-002: Add debug tracing at pipeline entry
-        std.debug.print("DEBUG FIX-002: [PIPELINE START] - convertMidiToMxl called with {} bytes of MIDI data\n", .{midi_data.len});
+        log.tag("FIX-002:PIPELINE", "convertMidiToMxl called with {} bytes of MIDI data", .{midi_data.len});
         
         const vlogger = @import("verbose_logger.zig").getVerboseLogger();
         
@@ -281,7 +285,7 @@ pub const Pipeline = struct {
         
         vlogger.pipelineStep(.MIDI_PARSE_TRACKS, "Finding and parsing MIDI tracks", .{});
         // Step 2: Find and parse tracks
-        var tracks = std.ArrayList(midi_parser.TrackParseResult).init(self.allocator);
+        var tracks = containers.List(midi_parser.TrackParseResult).init(self.allocator);
         var tracks_owned = true; // Track ownership state
         defer {
             if (tracks_owned) {
@@ -304,7 +308,7 @@ pub const Pipeline = struct {
             // CRITICAL SAFETY: Prevent infinite loops in MIDI parsing
             parse_iterations += 1;
             if (parse_iterations > max_parse_iterations) {
-                std.debug.print("SAFETY: Too many MIDI parsing iterations, breaking to prevent hang\n", .{});
+                log.warn("Too many MIDI parsing iterations, breaking to prevent hang", .{});
                 break;
             }
             // Look for MTrk magic
@@ -316,7 +320,7 @@ pub const Pipeline = struct {
                 try tracks.append(track_result);
                 
                 // Skip to next track (8 bytes header + track length)
-                const track_length = std.mem.readInt(u32, midi_data[offset+4..offset+8][0..4], .big);
+                const track_length = binary_reader.readU32BE(midi_data, offset + 4);
                 offset += 8 + track_length;
                 tracks_found += 1;
             } else {
@@ -351,19 +355,19 @@ pub const Pipeline = struct {
         vlogger.pipelineStep(.TIMING_DIVISION_SETUP, "Setting up division converter (MIDI PPQ {} -> MXL divisions {})", .{divisions, self.config.divisions});
         
         // Step 3: Process notes for each part
-        var all_measures = std.ArrayList(timing.Measure).init(self.allocator);
+        var all_measures = containers.List(timing.Measure).init(self.allocator);
         defer all_measures.deinit();
         
         // Store enhanced notes for MXL generation with educational metadata
-        var all_enhanced_notes = std.ArrayList(enhanced_note.EnhancedTimedNote).init(self.allocator);
+        var all_enhanced_notes = containers.List(enhanced_note.EnhancedTimedNote).init(self.allocator);
         defer all_enhanced_notes.deinit();
         
         // DEBUG FIX-002: Add debug tracing at main part processing loop entry
-        std.debug.print("DEBUG FIX-002: [PART LOOP START] - About to process {} parts\n", .{container.parts.items.len});
+        log.tag("FIX-002:PARTS", "About to process {} parts", .{container.parts.items.len});
         
         for (container.parts.items, 0..) |part, part_idx| {
             // DEBUG FIX-002: Add debug tracing for each part processing iteration
-            std.debug.print("DEBUG FIX-002: [PART {} START] - Processing part {}/{}\n", .{part_idx, part_idx + 1, container.parts.items.len});
+            log.tag("FIX-002:PART", "Processing part {}/{}", .{part_idx + 1, container.parts.items.len});
             
             // CRITICAL SAFETY: Add logging to identify which part causes hangs
             // Processing part {d}/{d} - removed debug output for production
@@ -372,13 +376,13 @@ pub const Pipeline = struct {
             
             // TASK 1.3: Process each track within the part separately to maintain track indices
             // Implements TASK 1.3 per CHORD_DETECTION_FIX_TASK_LIST.md lines 41-47
-            var part_timed_notes = std.ArrayList(timing.TimedNote).init(self.allocator);
+            var part_timed_notes = containers.List(timing.TimedNote).init(self.allocator);
             defer part_timed_notes.deinit();
             
             // Process each track that belongs to this part
             for (part.track_indices.items) |track_idx| {
                 // Get notes for this specific track
-                var track_notes = std.ArrayList(midi_parser.NoteEvent).init(self.allocator);
+                var track_notes = containers.List(midi_parser.NoteEvent).init(self.allocator);
                 defer track_notes.deinit();
                 
                 const track = &container.tracks.items[track_idx];
@@ -490,12 +494,12 @@ pub const Pipeline = struct {
             }
             
             // DEBUG FIX-002: Add debug tracing after each part completes processing
-            std.debug.print("DEBUG FIX-002: [PART {} COMPLETE] - Finished processing part {}/{}\n", .{part_idx, part_idx + 1, container.parts.items.len});
+            log.tag("FIX-002:PART", "Finished processing part {}/{}", .{part_idx + 1, container.parts.items.len});
         }
         
         // DEBUG FIX-002: Add comprehensive debug tracing to identify execution path issue
-        std.debug.print("DEBUG FIX-002: [PART PROCESSING COMPLETE] - Parts processed: {}, Enhanced notes collected: {}\n", .{container.parts.items.len, all_enhanced_notes.items.len});
-        std.debug.print("DEBUG FIX-002: [CONTROL FLOW CHECK] - About to enter global collection phase\n", .{});
+        log.tag("FIX-002:PARTS", "Parts processed: {}, Enhanced notes collected: {}", .{container.parts.items.len, all_enhanced_notes.items.len});
+        log.tag("FIX-002:FLOW", "About to enter global collection phase", .{});
         
         // CRITICAL FIX: Skip global chord detection when voice assignment is enabled
         // Global chord detection creates new notes without voice data, which breaks multi-voice support
@@ -509,39 +513,37 @@ pub const Pipeline = struct {
             
             // GLOBAL NOTE COLLECTION PHASE (007.xxx.xxx) - TASK 2.2: Implement Global Collection Logic
             // Implements TASK 2.2 per CHORD_DETECTION_FIX_TASK_LIST.md Section 2 lines 65-73
-            std.debug.print("DEBUG FIX-002: [GLOBAL COLLECTION ENTRY] - Starting global note collection for cross-track chord detection\n", .{});
+            log.tag("FIX-002:GLOBAL", "Starting global note collection for cross-track chord detection", .{});
             vlogger.pipelineStep(.MXL_START, "Starting global note collection for cross-track chord detection", .{});
             
             // Create GlobalNoteCollector for cross-track chord detection
-            std.debug.print("DEBUG FIX-002: [COLLECTOR INIT] - Initializing GlobalNoteCollector\n", .{});
+            log.tag("FIX-002:COLLECTOR", "Initializing GlobalNoteCollector", .{});
             var global_collector = GlobalNoteCollector.init(self.allocator);
             defer global_collector.deinit();
             
             // Add safety checks for null pointers or empty collections
             if (container.parts.items.len == 0) {
-                std.debug.print("DEBUG FIX-002: [ERROR CHECK] - No parts found in container, skipping global collection\n", .{});
+                log.tag("FIX-002:WARNING", "No parts found in container, skipping global collection", .{});
             } else {
-                std.debug.print("DEBUG FIX-002: [CONTAINER STATE] - Parts: {}, Tracks: {}\n", .{container.parts.items.len, container.tracks.items.len});
+                log.tag("FIX-002:STATE", "Parts: {}, Tracks: {}", .{container.parts.items.len, container.tracks.items.len});
                 
                 // Collect all notes from all parts with track information preserved
-                std.debug.print("DEBUG FIX-002: [COLLECTION START] - Calling collectFromAllParts\n", .{});
-                global_collector.collectFromAllParts(&container) catch |err| {
-                    std.debug.print("DEBUG FIX-002: [COLLECTION ERROR] - Error during global collection: {}\n", .{err});
-                    return err;
-                };
-                std.debug.print("DEBUG FIX-002: [COLLECTION COMPLETE] - Collection completed successfully\n", .{});
+                log.tag("FIX-002:COLLECTION", "Calling collectFromAllParts", .{});
+                global_collector.collectFromAllParts(&container) catch |err| 
+                    return error_helpers.logAndReturn("Error during global collection", err);
+                log.tag("FIX-002:COLLECTION", "Collection completed successfully", .{});
             }
             
             // Log collection results for diagnostic purposes
-            std.debug.print("DEBUG FIX-002: [COLLECTION RESULTS] - Collected {} notes from {} parts for chord detection\n", .{global_collector.all_notes.items.len, container.parts.items.len});
+            log.tag("FIX-002:RESULTS", "Collected {} notes from {} parts for chord detection", .{global_collector.all_notes.items.len, container.parts.items.len});
             vlogger.pipelineStep(.MXL_START, "Collected {} notes from {} parts for chord detection", 
                 .{global_collector.all_notes.items.len, container.parts.items.len});
             
             // CROSS-TRACK CHORD DETECTION PHASE (TASK 4.1) - TASK 4.1: Update MXL Generator for Global Chords
             // Implements TASK 4.1 per CHORD_DETECTION_FIX_TASK_LIST.md Section 4 lines 115-121
-            std.debug.print("DEBUG FIX-002: [CHORD DETECTION START] - Entering chord detection phase\n", .{});
+            log.tag("FIX-002:CHORDS", "Entering chord detection phase", .{});
             if (global_collector.all_notes.items.len > 0) {
-                std.debug.print("DEBUG FIX-002: [CHORD DETECTION ACTIVE] - Detecting cross-track chords from {} global notes\n", .{global_collector.all_notes.items.len});
+                log.tag("FIX-002:CHORDS", "Detecting cross-track chords from {} global notes", .{global_collector.all_notes.items.len});
                 vlogger.pipelineStep(.MXL_START, "Detecting cross-track chords from {} global notes", .{global_collector.all_notes.items.len});
                 
                 // CDR-2.2: Use minimal chord detector (fail-safe, EXACT timing only)
@@ -549,17 +551,15 @@ pub const Pipeline = struct {
                 var detector = minimal_chord_detector.MinimalChordDetector.init(self.allocator);
                 
                 // Detect chords with EXACT timing match only (no tolerance to prevent sequential grouping)
-                std.debug.print("CDR-2.2: Using minimal chord detector (EXACT timing, no tolerance)\n", .{});
-                const detected_chords = detector.detectChords(global_collector.all_notes.items) catch |err| {
-                    std.debug.print("CDR-2.2: [CHORD DETECTION ERROR] - Error during chord detection: {}\n", .{err});
-                    return err;
-                };
+                log.tag("CDR-2.2", "Using minimal chord detector (EXACT timing, no tolerance)", .{});
+                const detected_chords = detector.detectChords(global_collector.all_notes.items) catch |err|
+                    return error_helpers.logAndReturn("CDR-2.2: Error during chord detection", err);
                 global_chords = detected_chords;
                 
-                std.debug.print("DEBUG FIX-002: [CHORD DETECTION COMPLETE] - Detected {} cross-track chords\n", .{detected_chords.len});
+                log.tag("FIX-002:CHORDS", "Detected {} cross-track chords", .{detected_chords.len});
                 vlogger.pipelineStep(.MXL_START, "Detected {} cross-track chords", .{detected_chords.len});
             } else {
-                std.debug.print("DEBUG FIX-002: [CHORD DETECTION SKIP] - No global notes available, skipping chord detection\n", .{});
+                log.tag("FIX-002:CHORDS", "No global notes available, skipping chord detection", .{});
             }
         } else {
             // When voice assignment is enabled, run chord detection on enhanced notes
@@ -576,10 +576,8 @@ pub const Pipeline = struct {
                 var detector = minimal_chord_detector.MinimalChordDetector.init(self.allocator);
                 
                 // Detect chords with EXACT timing match only (no tolerance to prevent sequential grouping)
-                const detected_chords = detector.detectChords(timed_notes_for_chords) catch |err| {
-                    std.debug.print("[CHORD DETECTION ERROR] - Error during chord detection on enhanced notes: {}\n", .{err});
-                    return err;
-                };
+                const detected_chords = detector.detectChords(timed_notes_for_chords) catch |err|
+                    return error_helpers.logAndReturn("Error during chord detection on enhanced notes", err);
                 global_chords = detected_chords;
                 
                 vlogger.pipelineStep(.MXL_START, "Detected {} chords from enhanced notes with voice assignments", .{detected_chords.len});
@@ -589,17 +587,17 @@ pub const Pipeline = struct {
         }
         
         // DEBUG FIX-002: Add debug tracing before MXL generation phase
-        std.debug.print("DEBUG FIX-002: [MXL GENERATION ENTRY] - About to start MusicXML generation\n", .{});
-        std.debug.print("DEBUG FIX-002: [MEMORY STATE] - Allocator state before MXL generation\n", .{});
+        log.tag("FIX-002:MXL", "About to start MusicXML generation", .{});
+        log.tag("FIX-002:MEMORY", "Allocator state before MXL generation", .{});
         
         // MUSICXML GENERATION PHASE (008.xxx.xxx)
-        std.debug.print("DEBUG FIX-002: [MXL PHASE START] - Starting MusicXML generation phase\n", .{});
+        log.tag("FIX-002:MXL", "Starting MusicXML generation phase", .{});
         vlogger.pipelineStep(.MXL_START, "Starting MusicXML generation", .{});
         
         vlogger.pipelineStep(.MXL_GENERATOR_INIT, "Initializing MXL generator (MIDI PPQ: {}, target divisions: {})", .{divisions, self.config.divisions});
         // Step 4: Generate MusicXML with measure boundaries
         // Starting MXL generation - removed debug output for production
-        var xml_buffer = std.ArrayList(u8).init(self.allocator);
+        var xml_buffer = containers.List(u8).init(self.allocator);
         // TIMING-2.3 FIX: Use proper MIDI to MusicXML conversion
         var generator = try mxl_generator.Generator.initWithConversion(self.allocator, divisions, self.config.divisions);
         defer generator.deinit();

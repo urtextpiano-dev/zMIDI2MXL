@@ -1,5 +1,5 @@
 const std = @import("std");
-const testing = std.testing;
+const t = @import("../../src/test_utils.zig");
 
 // ============================================================================
 // Minimal struct definitions for isolated testing
@@ -309,8 +309,8 @@ test "beamCrossesTupletBoundary - all notes in one tuplet" {
     const simplified = beamCrossesTupletBoundary_simplified(&processor, group, &tuplets);
     
     // The original has a bug - it counts notes in tuplets, not unique tuplets
-    try testing.expectEqual(true, original);  // Bug: incorrectly returns true
-    try testing.expectEqual(false, simplified); // Correct: returns false
+    try t.expectEq(true, original);  // Bug: incorrectly returns true
+    try t.expectEq(false, simplified); // Correct: returns false
 }
 
 test "beamCrossesTupletBoundary - notes spanning tuplet boundary" {
@@ -337,8 +337,8 @@ test "beamCrossesTupletBoundary - notes spanning tuplet boundary" {
     const simplified = beamCrossesTupletBoundary_simplified(&processor, group, &tuplets);
     
     // Both correctly identify crossing tuplet boundary
-    try testing.expectEqual(true, original);
-    try testing.expectEqual(true, simplified);
+    try t.expectEq(true, original);
+    try t.expectEq(true, simplified);
 }
 
 test "beamCrossesTupletBoundary - multiple tuplets touched" {
@@ -366,8 +366,8 @@ test "beamCrossesTupletBoundary - multiple tuplets touched" {
     const simplified = beamCrossesTupletBoundary_simplified(&processor, group, &tuplets);
     
     // Both correctly identify multiple tuplets
-    try testing.expectEqual(true, original);
-    try testing.expectEqual(true, simplified);
+    try t.expectEq(true, original);
+    try t.expectEq(true, simplified);
 }
 
 test "beamCrossesTupletBoundary - no tuplets" {
@@ -392,8 +392,8 @@ test "beamCrossesTupletBoundary - no tuplets" {
     const simplified = beamCrossesTupletBoundary_simplified(&processor, group, &tuplets);
     
     // Both correctly return false for no tuplets
-    try testing.expectEqual(false, original);
-    try testing.expectEqual(false, simplified);
+    try t.expectEq(false, original);
+    try t.expectEq(false, simplified);
 }
 
 test "beamCrossesTupletBoundary - empty notes array" {
@@ -416,6 +416,6 @@ test "beamCrossesTupletBoundary - empty notes array" {
     const simplified = beamCrossesTupletBoundary_simplified(&processor, group, &tuplets);
     
     // Both correctly return false for empty notes
-    try testing.expectEqual(false, original);
-    try testing.expectEqual(false, simplified);
+    try t.expectEq(false, original);
+    try t.expectEq(false, simplified);
 }

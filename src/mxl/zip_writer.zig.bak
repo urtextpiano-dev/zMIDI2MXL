@@ -1,5 +1,4 @@
 const std = @import("std");
-const containers = @import("../utils/containers.zig");
 const log = @import("../utils/log.zig");
 
 // Implements TASK-010 per MXL_Architecture_Reference.md Section 7 lines 923-1070
@@ -48,7 +47,7 @@ const ZipEntry = struct {
 pub const ZipWriter = struct {
     allocator: std.mem.Allocator,
     writer: std.io.AnyWriter,
-    entries: containers.List(ZipEntry),
+    entries: std.ArrayList(ZipEntry),
     current_offset: u32,
     crc_table: [256]u32,
 
@@ -57,7 +56,7 @@ pub const ZipWriter = struct {
         var self = ZipWriter{
             .allocator = allocator,
             .writer = writer,
-            .entries = containers.List(ZipEntry).init(allocator),
+            .entries = std.ArrayList(ZipEntry).init(allocator),
             .current_offset = 0,
             .crc_table = undefined,
         };
@@ -231,7 +230,7 @@ pub const ZipWriter = struct {
     /// Compress data using DEFLATE
     /// Implements TASK-010 per MXL_Architecture_Reference.md Section 7.3 lines 970-986
     fn compressDeflate(self: *ZipWriter, data: []const u8) ![]u8 {
-        var compressed = containers.List(u8).init(self.allocator);
+        var compressed = std.ArrayList(u8).init(self.allocator);
         defer compressed.deinit();
 
         // Use zlib compression
@@ -414,7 +413,7 @@ test "CRC-32 calculation" {
 }
 
 test "create simple ZIP file" {
-    var buffer = containers.List(u8).init(std.testing.allocator);
+    var buffer = std.ArrayList(u8).init(std.testing.allocator);
     defer buffer.deinit();
 
     var writer = ZipWriter.init(std.testing.allocator, buffer.writer().any());
@@ -437,7 +436,7 @@ test "create simple ZIP file" {
 }
 
 test "create MXL with container.xml" {
-    var buffer = containers.List(u8).init(std.testing.allocator);
+    var buffer = std.ArrayList(u8).init(std.testing.allocator);
     defer buffer.deinit();
 
     var writer = ZipWriter.init(std.testing.allocator, buffer.writer().any());
@@ -460,7 +459,7 @@ test "create MXL with container.xml" {
 
 test "compression performance" {
     // Test that compression meets performance target (20MB/s)
-    var buffer = containers.List(u8).init(std.testing.allocator);
+    var buffer = std.ArrayList(u8).init(std.testing.allocator);
     defer buffer.deinit();
 
     var writer = ZipWriter.init(std.testing.allocator, buffer.writer().any());
@@ -494,7 +493,7 @@ test "compression performance" {
 }
 
 test "ZIP file ordering" {
-    var buffer = containers.List(u8).init(std.testing.allocator);
+    var buffer = std.ArrayList(u8).init(std.testing.allocator);
     defer buffer.deinit();
 
     var writer = ZipWriter.init(std.testing.allocator, buffer.writer().any());

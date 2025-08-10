@@ -8,6 +8,8 @@
 //! providing voice-aware note tracking.
 
 const std = @import("std");
+const containers = @import("../utils/containers.zig");
+const t = @import("../test_utils.zig");
 const voice_allocation = @import("../voice_allocation.zig");
 const timing = @import("../timing.zig");
 const midi_events = @import("../midi/events.zig");
@@ -20,7 +22,7 @@ pub const VoiceTracker = struct {
     /// Currently active notes per voice per channel
     active_notes: [16][voice_allocation.MAX_VOICES]?ActiveNote,
     /// Voice assignment history for continuity
-    voice_history: std.ArrayList(VoiceEvent),
+    voice_history: containers.List(VoiceEvent),
 
     const ActiveNote = struct {
         note: u8,
@@ -44,7 +46,7 @@ pub const VoiceTracker = struct {
             .allocator = allocator,
             .voice_allocator = voice_allocation.VoiceAllocator.init(allocator),
             .active_notes = [_][voice_allocation.MAX_VOICES]?ActiveNote{[_]?ActiveNote{null} ** voice_allocation.MAX_VOICES} ** 16,
-            .voice_history = std.ArrayList(VoiceEvent).init(allocator),
+            .voice_history = containers.List(VoiceEvent).init(allocator),
         };
     }
 
@@ -133,7 +135,7 @@ pub const VoiceTracker = struct {
 
     /// Get completed notes with voice assignments for a channel
     pub fn getCompletedNotes(self: *VoiceTracker, channel: u8) ![]voice_allocation.VoicedNote {
-        var notes = std.ArrayList(timing.TimedNote).init(self.allocator);
+        var notes = containers.List(timing.TimedNote).init(self.allocator);
         defer notes.deinit();
 
         // Track start events per MIDI note (0..127)
@@ -252,14 +254,14 @@ test "voice tracker basic functionality" {
     try tracker.processEvent(note_off_64, 960);
 
     // Verify active notes during overlap
-    try std.testing.expect(tracker.active_notes[0][0] != null);
-    try std.testing.expect(tracker.active_notes[0][1] != null);
+    try t.expect(tracker.active_notes[0][0] != null);
+    try t.expect(tracker.active_notes[0][1] != null);
 
     // Get completed notes
     const voiced_notes = try tracker.getCompletedNotes(0);
     defer allocator.free(voiced_notes);
 
-    try std.testing.expectEqual(@as(usize, 2), voiced_notes.len);
+    try t.expectEq(2, voiced_notes.len);
 }
 
 test "voice tracker with measure integration" {
@@ -304,9 +306,9 @@ test "voice tracker with measure integration" {
     const voiced_notes = try tracker.processTimedNotes(&measures);
     defer allocator.free(voiced_notes);
 
-    try std.testing.expectEqual(@as(usize, 2), voiced_notes.len);
+    try t.expectEq(2, voiced_notes.len);
     // First note should be voice 1
-    try std.testing.expectEqual(@as(u8, 1), voiced_notes[0].voice);
+    try t.expectEq(1, voiced_notes[0].voice);
     // Second note overlaps, should be voice 2
-    try std.testing.expectEqual(@as(u8, 2), voiced_notes[1].voice);
+    try t.expectEq(2, voiced_notes[1].voice);
 }

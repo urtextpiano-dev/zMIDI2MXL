@@ -24,6 +24,7 @@
 //! - CHORD_DETECTION_FIX_TASK_LIST.md Section 3.2 lines 92-96
 
 const std = @import("std");
+const containers = @import("../utils/containers.zig");
 const timing = @import("../timing.zig");
 const TimedNote = timing.TimedNote;
 const ChordGroup = timing.ChordGroup;
@@ -76,7 +77,7 @@ pub const CrossTrackChordDetector = struct {
         @memcpy(sorted_notes, notes);
         std.sort.pdq(TimedNote, sorted_notes, {}, compareByStartTime);
 
-        var out = std.ArrayList(ChordGroup).init(self.allocator);
+        var out = containers.List(ChordGroup).init(self.allocator);
         defer out.deinit();
 
         var i: usize = 0;

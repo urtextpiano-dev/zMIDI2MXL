@@ -1,4 +1,5 @@
 const std = @import("std");
+const t = @import("../../src/test_utils.zig");
 const print = std.debug.print;
 
 // Mock Arena Allocator
@@ -231,7 +232,7 @@ fn testCalculateAndSetStemDirection() !void {
         
         try processor.calculateAndSetStemDirection(&note, beam_groups);
         
-        std.testing.expect(note.stem_info != null) catch |err| {
+        t.expect(note.stem_info != null) catch |err| {
             print("ERROR: stem_info should not be null: {}\n", .{err});
             return err;
         };
@@ -240,15 +241,15 @@ fn testCalculateAndSetStemDirection() !void {
         print("Result: direction={}, voice={}, in_beam_group={}\n", 
             .{stem_info.direction, stem_info.voice, stem_info.in_beam_group});
         
-        std.testing.expect(stem_info.direction == .up) catch |err| {
+        t.expect(stem_info.direction == .up) catch |err| {
             print("ERROR: Expected .up, got {}\n", .{stem_info.direction});
             return err;
         };
-        std.testing.expect(stem_info.voice == 1) catch |err| {
+        t.expect(stem_info.voice == 1) catch |err| {
             print("ERROR: Expected voice 1, got {}\n", .{stem_info.voice});
             return err;
         };
-        std.testing.expect(!stem_info.in_beam_group) catch |err| {
+        t.expect(!stem_info.in_beam_group) catch |err| {
             print("ERROR: Expected not in beam group\n", .{});
             return err;
         };
@@ -279,11 +280,11 @@ fn testCalculateAndSetStemDirection() !void {
         print("Result: direction={}, voice={}, in_beam_group={}\n", 
             .{stem_info.direction, stem_info.voice, stem_info.in_beam_group});
         
-        std.testing.expect(stem_info.direction == .down) catch |err| {
+        t.expect(stem_info.direction == .down) catch |err| {
             print("ERROR: Expected .down, got {}\n", .{stem_info.direction});
             return err;
         };
-        std.testing.expect(stem_info.voice == 2) catch |err| {
+        t.expect(stem_info.voice == 2) catch |err| {
             print("ERROR: Expected voice 2, got {}\n", .{stem_info.voice});
             return err;
         };
@@ -337,11 +338,11 @@ fn testCalculateAndSetStemDirection() !void {
         print("Result: direction={}, voice={}, in_beam_group={}, beam_group_id={?}\n", 
             .{stem_info.direction, stem_info.voice, stem_info.in_beam_group, stem_info.beam_group_id});
         
-        std.testing.expect(stem_info.in_beam_group) catch |err| {
+        t.expect(stem_info.in_beam_group) catch |err| {
             print("ERROR: Expected to be in beam group\n", .{});
             return err;
         };
-        std.testing.expect(stem_info.beam_group_id == 1) catch |err| {
+        t.expect(stem_info.beam_group_id == 1) catch |err| {
             print("ERROR: Expected beam_group_id 1, got {?}\n", .{stem_info.beam_group_id});
             return err;
         };
@@ -371,7 +372,7 @@ fn testCalculateAndSetStemDirection() !void {
         const stem_info_v1 = note_v1.stem_info.?;
         print("Voice 1 result: direction={}\n", .{stem_info_v1.direction});
         
-        std.testing.expect(stem_info_v1.direction == .up) catch |err| {
+        t.expect(stem_info_v1.direction == .up) catch |err| {
             print("ERROR: Expected voice 1 middle line to be .up, got {}\n", .{stem_info_v1.direction});
             return err;
         };
@@ -393,7 +394,7 @@ fn testCalculateAndSetStemDirection() !void {
         const stem_info_v3 = note_v3.stem_info.?;
         print("Voice 3 result: direction={}\n", .{stem_info_v3.direction});
         
-        std.testing.expect(stem_info_v3.direction == .down) catch |err| {
+        t.expect(stem_info_v3.direction == .down) catch |err| {
             print("ERROR: Expected voice 3 middle line to be .down, got {}\n", .{stem_info_v3.direction});
             return err;
         };
@@ -429,8 +430,8 @@ test "calculateAndSetStemDirection basic functionality" {
     const beam_groups: []const BeamGroupInfo = &.{};
     try processor.calculateAndSetStemDirection(&note, beam_groups);
     
-    try std.testing.expect(note.stem_info != null);
-    try std.testing.expect(note.stem_info.?.direction == .up);
+    try t.expect(note.stem_info != null);
+    try t.expect(note.stem_info.?.direction == .up);
 }
 
 test "calculateAndSetStemDirection beam group detection" {
@@ -468,9 +469,9 @@ test "calculateAndSetStemDirection beam group detection" {
     const beam_groups = [_]BeamGroupInfo{beam_group};
     try processor.calculateAndSetStemDirection(&note, &beam_groups);
     
-    try std.testing.expect(note.stem_info != null);
-    try std.testing.expect(note.stem_info.?.in_beam_group);
-    try std.testing.expect(note.stem_info.?.beam_group_id == 1);
+    try t.expect(note.stem_info != null);
+    try t.expect(note.stem_info.?.in_beam_group);
+    try t.expect(note.stem_info.?.beam_group_id == 1);
 }
 
 test "calculateAndSetStemDirection error handling" {
@@ -498,7 +499,7 @@ test "calculateAndSetStemDirection error handling" {
     const beam_groups: []const BeamGroupInfo = &.{};
     const result = processor.calculateAndSetStemDirection(&note, beam_groups);
     
-    try std.testing.expect(result == EducationalProcessingError.ArenaNotInitialized);
+    try t.expect(result == EducationalProcessingError.ArenaNotInitialized);
 }
 
 test "calculateAndSetStemDirection voice calculation" {
@@ -525,8 +526,8 @@ test "calculateAndSetStemDirection voice calculation" {
     const beam_groups: []const BeamGroupInfo = &.{};
     try processor.calculateAndSetStemDirection(&note, beam_groups);
     
-    try std.testing.expect(note.stem_info != null);
-    try std.testing.expect(note.stem_info.?.voice == 4);
+    try t.expect(note.stem_info != null);
+    try t.expect(note.stem_info.?.voice == 4);
 }
 
 test "calculateAndSetStemDirection staff position" {
@@ -553,9 +554,9 @@ test "calculateAndSetStemDirection staff position" {
     const beam_groups: []const BeamGroupInfo = &.{};
     try processor.calculateAndSetStemDirection(&note, beam_groups);
     
-    try std.testing.expect(note.stem_info != null);
-    try std.testing.expect(note.stem_info.?.staff_position != null);
-    try std.testing.expect(note.stem_info.?.staff_position.?.line == 3);
+    try t.expect(note.stem_info != null);
+    try t.expect(note.stem_info.?.staff_position != null);
+    try t.expect(note.stem_info.?.staff_position.?.line == 3);
 }
 
 test "calculateAndSetStemDirection direction rules" {
@@ -582,7 +583,7 @@ test "calculateAndSetStemDirection direction rules" {
         .arena = &arena,
     };
     try processor.calculateAndSetStemDirection(&note_low, beam_groups);
-    try std.testing.expect(note_low.stem_info.?.direction == .up);
+    try t.expect(note_low.stem_info.?.direction == .up);
     
     // Test above middle line (should be down)
     var note_high = enhanced_note.EnhancedTimedNote{
@@ -596,7 +597,7 @@ test "calculateAndSetStemDirection direction rules" {
         .arena = &arena,
     };
     try processor.calculateAndSetStemDirection(&note_high, beam_groups);
-    try std.testing.expect(note_high.stem_info.?.direction == .down);
+    try t.expect(note_high.stem_info.?.direction == .down);
 }
 
 pub fn main() !void {

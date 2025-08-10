@@ -1,4 +1,5 @@
 const std = @import("std");
+const containers = @import("../utils/containers.zig");
 const parser = @import("parser.zig");
 const error_mod = @import("../error.zig");
 
@@ -44,7 +45,7 @@ pub const PartInfo = struct {
     part_abbreviation: ?[]const u8, // Abbreviated name (optional)
     midi_channel: ?u4, // Primary MIDI channel (if single channel)
     midi_program: ?u8, // MIDI program number (if set)
-    track_indices: std.ArrayList(u16), // Source MIDI track indices
+    track_indices: containers.List(u16), // Source MIDI track indices
     is_percussion: bool, // True for percussion parts
 
     pub fn init(allocator: std.mem.Allocator, id: []const u8, name: []const u8) !PartInfo {
@@ -57,7 +58,7 @@ pub const PartInfo = struct {
             .part_abbreviation = null,
             .midi_channel = null,
             .midi_program = null,
-            .track_indices = std.ArrayList(u16).init(allocator),
+            .track_indices = containers.List(u16).init(allocator),
             .is_percussion = false,
         };
     }
@@ -80,18 +81,18 @@ pub const PartInfo = struct {
 /// Multi-track container for managing multiple MIDI tracks
 pub const MultiTrackContainer = struct {
     allocator: std.mem.Allocator,
-    tracks: std.ArrayList(parser.TrackParseResult),
-    track_info: std.ArrayList(TrackInfo),
-    parts: std.ArrayList(PartInfo),
+    tracks: containers.List(parser.TrackParseResult),
+    track_info: containers.List(TrackInfo),
+    parts: containers.List(PartInfo),
     format: parser.MidiFormat,
     division: u16,
 
     pub fn init(allocator: std.mem.Allocator, format: parser.MidiFormat, division: u16) MultiTrackContainer {
         return .{
             .allocator = allocator,
-            .tracks = std.ArrayList(parser.TrackParseResult).init(allocator),
-            .track_info = std.ArrayList(TrackInfo).init(allocator),
-            .parts = std.ArrayList(PartInfo).init(allocator),
+            .tracks = containers.List(parser.TrackParseResult).init(allocator),
+            .track_info = containers.List(TrackInfo).init(allocator),
+            .parts = containers.List(PartInfo).init(allocator),
             .format = format,
             .division = division,
         };
@@ -284,13 +285,13 @@ pub const MultiTrackContainer = struct {
     }
 
     /// Get notes for a specific part
-    pub fn getNotesForPart(self: *const MultiTrackContainer, part_index: usize) !std.ArrayList(parser.NoteEvent) {
+    pub fn getNotesForPart(self: *const MultiTrackContainer, part_index: usize) !containers.List(parser.NoteEvent) {
         if (part_index >= self.parts.items.len) {
             return error_mod.MidiError.InvalidEventData;
         }
 
         const part = &self.parts.items[part_index];
-        var notes = std.ArrayList(parser.NoteEvent).init(self.allocator);
+        var notes = containers.List(parser.NoteEvent).init(self.allocator);
         errdefer notes.deinit(); // ensure no leak on any later error
 
         // Collect notes from all tracks in this part
@@ -318,8 +319,8 @@ pub const MultiTrackContainer = struct {
 
     /// Get all tempo events from all tracks, sorted by tick position
     /// Implements TASK-2.1 per MIDI_Architecture_Reference.md tempo event extraction
-    pub fn getAllTempoEvents(self: *const MultiTrackContainer) !std.ArrayList(parser.TempoEvent) {
-        var tempo_events = std.ArrayList(parser.TempoEvent).init(self.allocator);
+    pub fn getAllTempoEvents(self: *const MultiTrackContainer) !containers.List(parser.TempoEvent) {
+        var tempo_events = containers.List(parser.TempoEvent).init(self.allocator);
         errdefer tempo_events.deinit(); // prevent leak if any append fails
 
         // Collect tempo events from all tracks
@@ -402,17 +403,17 @@ test "MultiTrackContainer basic operations" {
 
     // Create a dummy track
     var track = parser.TrackParseResult{
-        .note_events = std.ArrayList(parser.NoteEvent).init(allocator),
-        .tempo_events = std.ArrayList(parser.TempoEvent).init(allocator),
-        .time_signature_events = std.ArrayList(parser.TimeSignatureEvent).init(allocator),
-        .key_signature_events = std.ArrayList(parser.KeySignatureEvent).init(allocator),
-        .text_events = std.ArrayList(parser.TextEvent).init(allocator),
-        .control_change_events = std.ArrayList(parser.ControlChangeEvent).init(allocator),
-        .program_change_events = std.ArrayList(parser.ProgramChangeEvent).init(allocator),
-        .polyphonic_pressure_events = std.ArrayList(parser.PolyphonicPressureEvent).init(allocator),
-        .channel_pressure_events = std.ArrayList(parser.ChannelPressureEvent).init(allocator),
-        .pitch_bend_events = std.ArrayList(parser.PitchBendEvent).init(allocator),
-        .rpn_events = std.ArrayList(parser.RpnEvent).init(allocator),
+        .note_events = containers.List(parser.NoteEvent).init(allocator),
+        .tempo_events = containers.List(parser.TempoEvent).init(allocator),
+        .time_signature_events = containers.List(parser.TimeSignatureEvent).init(allocator),
+        .key_signature_events = containers.List(parser.KeySignatureEvent).init(allocator),
+        .text_events = containers.List(parser.TextEvent).init(allocator),
+        .control_change_events = containers.List(parser.ControlChangeEvent).init(allocator),
+        .program_change_events = containers.List(parser.ProgramChangeEvent).init(allocator),
+        .polyphonic_pressure_events = containers.List(parser.PolyphonicPressureEvent).init(allocator),
+        .channel_pressure_events = containers.List(parser.ChannelPressureEvent).init(allocator),
+        .pitch_bend_events = containers.List(parser.PitchBendEvent).init(allocator),
+        .rpn_events = containers.List(parser.RpnEvent).init(allocator),
         .note_duration_tracker = parser.NoteDurationTracker.init(allocator),
         .track_length = 1000,
         .events_parsed = 10,
@@ -442,17 +443,17 @@ test "Multi-track part creation - Format 1" {
 
     // Add conductor track (no notes)
     const conductor_track = parser.TrackParseResult{
-        .note_events = std.ArrayList(parser.NoteEvent).init(allocator),
-        .tempo_events = std.ArrayList(parser.TempoEvent).init(allocator),
-        .time_signature_events = std.ArrayList(parser.TimeSignatureEvent).init(allocator),
-        .key_signature_events = std.ArrayList(parser.KeySignatureEvent).init(allocator),
-        .text_events = std.ArrayList(parser.TextEvent).init(allocator),
-        .control_change_events = std.ArrayList(parser.ControlChangeEvent).init(allocator),
-        .program_change_events = std.ArrayList(parser.ProgramChangeEvent).init(allocator),
-        .polyphonic_pressure_events = std.ArrayList(parser.PolyphonicPressureEvent).init(allocator),
-        .channel_pressure_events = std.ArrayList(parser.ChannelPressureEvent).init(allocator),
-        .pitch_bend_events = std.ArrayList(parser.PitchBendEvent).init(allocator),
-        .rpn_events = std.ArrayList(parser.RpnEvent).init(allocator),
+        .note_events = containers.List(parser.NoteEvent).init(allocator),
+        .tempo_events = containers.List(parser.TempoEvent).init(allocator),
+        .time_signature_events = containers.List(parser.TimeSignatureEvent).init(allocator),
+        .key_signature_events = containers.List(parser.KeySignatureEvent).init(allocator),
+        .text_events = containers.List(parser.TextEvent).init(allocator),
+        .control_change_events = containers.List(parser.ControlChangeEvent).init(allocator),
+        .program_change_events = containers.List(parser.ProgramChangeEvent).init(allocator),
+        .polyphonic_pressure_events = containers.List(parser.PolyphonicPressureEvent).init(allocator),
+        .channel_pressure_events = containers.List(parser.ChannelPressureEvent).init(allocator),
+        .pitch_bend_events = containers.List(parser.PitchBendEvent).init(allocator),
+        .rpn_events = containers.List(parser.RpnEvent).init(allocator),
         .note_duration_tracker = parser.NoteDurationTracker.init(allocator),
         .track_length = 1000,
         .events_parsed = 5,
@@ -464,17 +465,17 @@ test "Multi-track part creation - Format 1" {
     // Add instrument tracks
     for (0..2) |i| {
         var track = parser.TrackParseResult{
-            .note_events = std.ArrayList(parser.NoteEvent).init(allocator),
-            .tempo_events = std.ArrayList(parser.TempoEvent).init(allocator),
-            .time_signature_events = std.ArrayList(parser.TimeSignatureEvent).init(allocator),
-            .key_signature_events = std.ArrayList(parser.KeySignatureEvent).init(allocator),
-            .text_events = std.ArrayList(parser.TextEvent).init(allocator),
-            .control_change_events = std.ArrayList(parser.ControlChangeEvent).init(allocator),
-            .program_change_events = std.ArrayList(parser.ProgramChangeEvent).init(allocator),
-            .polyphonic_pressure_events = std.ArrayList(parser.PolyphonicPressureEvent).init(allocator),
-            .channel_pressure_events = std.ArrayList(parser.ChannelPressureEvent).init(allocator),
-            .pitch_bend_events = std.ArrayList(parser.PitchBendEvent).init(allocator),
-            .rpn_events = std.ArrayList(parser.RpnEvent).init(allocator),
+            .note_events = containers.List(parser.NoteEvent).init(allocator),
+            .tempo_events = containers.List(parser.TempoEvent).init(allocator),
+            .time_signature_events = containers.List(parser.TimeSignatureEvent).init(allocator),
+            .key_signature_events = containers.List(parser.KeySignatureEvent).init(allocator),
+            .text_events = containers.List(parser.TextEvent).init(allocator),
+            .control_change_events = containers.List(parser.ControlChangeEvent).init(allocator),
+            .program_change_events = containers.List(parser.ProgramChangeEvent).init(allocator),
+            .polyphonic_pressure_events = containers.List(parser.PolyphonicPressureEvent).init(allocator),
+            .channel_pressure_events = containers.List(parser.ChannelPressureEvent).init(allocator),
+            .pitch_bend_events = containers.List(parser.PitchBendEvent).init(allocator),
+            .rpn_events = containers.List(parser.RpnEvent).init(allocator),
             .note_duration_tracker = parser.NoteDurationTracker.init(allocator),
             .track_length = 1000,
             .events_parsed = 20,

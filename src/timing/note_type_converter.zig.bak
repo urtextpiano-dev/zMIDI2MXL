@@ -1,5 +1,4 @@
 const std = @import("std");
-const containers = @import("../utils/containers.zig");
 const log = @import("../utils/log.zig");
 
 // Implements TASK-028 per IMPLEMENTATION_TASK_LIST.md lines 347-357
@@ -164,7 +163,7 @@ pub const NoteTypeConverter = struct {
         duration: u32,
         allocator: std.mem.Allocator,
     ) ![]TiedNote {
-        var tied_notes = containers.List(TiedNote).init(allocator);
+        var tied_notes = std.ArrayList(TiedNote).init(allocator);
         errdefer tied_notes.deinit();
         
         var remaining_duration = duration;
@@ -432,7 +431,7 @@ test "NoteTypeConverter - performance benchmark" {
     const duration_per_conversion_ns = duration_ns / iterations;
     const duration_per_conversion_us = @as(f64, @floatFromInt(duration_per_conversion_ns)) / 1000.0;
     
-    log.debug("Note type conversion time: {d:.3} μs per conversion (averaged over {} iterations)", 
+    std.debug.print("Note type conversion time: {d:.3} μs per conversion (averaged over {} iterations)\n", 
         .{ duration_per_conversion_us, iterations });
     
     // Verify < 5μs per conversion performance target per TASK-028

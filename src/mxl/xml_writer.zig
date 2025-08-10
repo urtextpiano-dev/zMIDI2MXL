@@ -1,4 +1,5 @@
 const std = @import("std");
+const containers = @import("../utils/containers.zig");
 const error_mod = @import("../error.zig");
 
 // Implements TASK-007 per MXL_Architecture_Reference.md Section 6.2 lines 770-880
@@ -9,7 +10,7 @@ pub const XmlWriter = struct {
     writer: std.io.AnyWriter,
     indent_level: u32 = 0,
     indent_string: []const u8 = "  ",
-    element_stack: std.ArrayList([]const u8),
+    element_stack: containers.List([]const u8),
     allocator: std.mem.Allocator,
     bytes_written: u64 = 0,
     
@@ -17,7 +18,7 @@ pub const XmlWriter = struct {
         return .{
             .writer = writer,
             .allocator = allocator,
-            .element_stack = std.ArrayList([]const u8).init(allocator),
+            .element_stack = containers.List([]const u8).init(allocator),
         };
     }
     
@@ -216,7 +217,7 @@ pub fn validateUtf8(bytes: []const u8) bool {
 // Tests
 
 test "XML declaration and doctype" {
-    var buffer = std.ArrayList(u8).init(std.testing.allocator);
+    var buffer = containers.List(u8).init(std.testing.allocator);
     defer buffer.deinit();
     
     var writer = XmlWriter.init(std.testing.allocator, buffer.writer().any());
@@ -233,7 +234,7 @@ test "XML declaration and doctype" {
 }
 
 test "XML element generation" {
-    var buffer = std.ArrayList(u8).init(std.testing.allocator);
+    var buffer = containers.List(u8).init(std.testing.allocator);
     defer buffer.deinit();
     
     var writer = XmlWriter.init(std.testing.allocator, buffer.writer().any());
@@ -254,7 +255,7 @@ test "XML element generation" {
 }
 
 test "XML character escaping" {
-    var buffer = std.ArrayList(u8).init(std.testing.allocator);
+    var buffer = containers.List(u8).init(std.testing.allocator);
     defer buffer.deinit();
     
     var writer = XmlWriter.init(std.testing.allocator, buffer.writer().any());
@@ -267,7 +268,7 @@ test "XML character escaping" {
 }
 
 test "XML attributes" {
-    var buffer = std.ArrayList(u8).init(std.testing.allocator);
+    var buffer = containers.List(u8).init(std.testing.allocator);
     defer buffer.deinit();
     
     var writer = XmlWriter.init(std.testing.allocator, buffer.writer().any());
@@ -296,7 +297,7 @@ test "UTF-8 validation" {
 }
 
 test "Empty elements" {
-    var buffer = std.ArrayList(u8).init(std.testing.allocator);
+    var buffer = containers.List(u8).init(std.testing.allocator);
     defer buffer.deinit();
     
     var writer = XmlWriter.init(std.testing.allocator, buffer.writer().any());
@@ -315,7 +316,7 @@ test "Empty elements" {
 }
 
 test "Nested elements" {
-    var buffer = std.ArrayList(u8).init(std.testing.allocator);
+    var buffer = containers.List(u8).init(std.testing.allocator);
     defer buffer.deinit();
     
     var writer = XmlWriter.init(std.testing.allocator, buffer.writer().any());

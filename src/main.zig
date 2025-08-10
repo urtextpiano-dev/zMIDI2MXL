@@ -1,10 +1,21 @@
 const std = @import("std");
+const builtin = @import("builtin");
+
+// Zig 0.14 requires a value, not a type
+pub const std_options: std.Options = .{
+    .log_level = switch (builtin.mode) {
+        .Debug => .debug,
+        .ReleaseSafe => .debug, // Keep debug for testing
+        .ReleaseFast, .ReleaseSmall => .warn,
+    },
+};
 
 // Core framework modules - TASK-002, TASK-003
 pub const error_mod = @import("error.zig");
 pub const log_mod = @import("log.zig");
 pub const result = @import("result.zig");
 pub const verbose_logger = @import("verbose_logger.zig");
+const error_helpers = @import("utils/error_helpers.zig");
 
 // Memory management - TASK-003
 pub const memory = struct {
@@ -397,6 +408,7 @@ test "error handling framework integration" {
 
 test "memory arena allocator integration" {
     // Test TASK-003: Memory Arena Allocator integration
+    // Note: Using custom memory.arena module, not ScopedArena helper
     var arena = memory.arena.ArenaAllocator.init(std.testing.allocator, false);
     defer arena.deinit();
 

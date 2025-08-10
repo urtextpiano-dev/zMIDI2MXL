@@ -10,6 +10,7 @@
 //! Performance: < 100μs per note (meets target)
 
 const std = @import("std");
+const t = @import("../test_utils.zig");
 const Event = @import("../midi/events.zig").Event;
 const NoteEvent = @import("../midi/events.zig").NoteEvent;
 
@@ -155,12 +156,12 @@ test "Grid subdivision to ticks conversion" {
     const ppq: u32 = 480;
 
     // Test each subdivision
-    try std.testing.expectEqual(@as(u32, 1920), GridSubdivision.whole.toTicks(ppq)); // 4 * 480
-    try std.testing.expectEqual(@as(u32, 960), GridSubdivision.half.toTicks(ppq)); // 2 * 480
-    try std.testing.expectEqual(@as(u32, 480), GridSubdivision.quarter.toTicks(ppq)); // 1 * 480
-    try std.testing.expectEqual(@as(u32, 240), GridSubdivision.eighth.toTicks(ppq)); // 480 / 2
-    try std.testing.expectEqual(@as(u32, 120), GridSubdivision.sixteenth.toTicks(ppq)); // 480 / 4
-    try std.testing.expectEqual(@as(u32, 60), GridSubdivision.thirty_second.toTicks(ppq)); // 480 / 8
+    try t.expectEq(1920, GridSubdivision.whole.toTicks(ppq)); // 4 * 480
+    try t.expectEq(960, GridSubdivision.half.toTicks(ppq)); // 2 * 480
+    try t.expectEq(480, GridSubdivision.quarter.toTicks(ppq)); // 1 * 480
+    try t.expectEq(240, GridSubdivision.eighth.toTicks(ppq)); // 480 / 2
+    try t.expectEq(120, GridSubdivision.sixteenth.toTicks(ppq)); // 480 / 4
+    try t.expectEq(60, GridSubdivision.thirty_second.toTicks(ppq)); // 480 / 8
 }
 
 test "Basic grid snapping" {
@@ -168,17 +169,17 @@ test "Basic grid snapping" {
     const quarter_grid = QuantizationGrid.init(480, .quarter);
 
     // Test exact grid positions
-    try std.testing.expectEqual(@as(u32, 0), quarter_grid.snapToGrid(0));
-    try std.testing.expectEqual(@as(u32, 480), quarter_grid.snapToGrid(480));
-    try std.testing.expectEqual(@as(u32, 960), quarter_grid.snapToGrid(960));
+    try t.expectEq(0, quarter_grid.snapToGrid(0));
+    try t.expectEq(480, quarter_grid.snapToGrid(480));
+    try t.expectEq(960, quarter_grid.snapToGrid(960));
 
     // Test rounding down (less than half grid)
-    try std.testing.expectEqual(@as(u32, 0), quarter_grid.snapToGrid(100));
-    try std.testing.expectEqual(@as(u32, 0), quarter_grid.snapToGrid(239));
+    try t.expectEq(0, quarter_grid.snapToGrid(100));
+    try t.expectEq(0, quarter_grid.snapToGrid(239));
 
     // Test rounding up (more than half grid)
-    try std.testing.expectEqual(@as(u32, 480), quarter_grid.snapToGrid(240));
-    try std.testing.expectEqual(@as(u32, 480), quarter_grid.snapToGrid(400));
+    try t.expectEq(480, quarter_grid.snapToGrid(240));
+    try t.expectEq(480, quarter_grid.snapToGrid(400));
 }
 
 test "Sixteenth note grid quantization" {
@@ -186,30 +187,30 @@ test "Sixteenth note grid quantization" {
     const sixteenth_grid = QuantizationGrid.init(480, .sixteenth);
 
     // Grid size should be 120 ticks (480 / 4)
-    try std.testing.expectEqual(@as(u32, 120), sixteenth_grid.grid_size);
+    try t.expectEq(120, sixteenth_grid.grid_size);
 
     // Test various positions
-    try std.testing.expectEqual(@as(u32, 0), sixteenth_grid.snapToGrid(0));
-    try std.testing.expectEqual(@as(u32, 120), sixteenth_grid.snapToGrid(120));
-    try std.testing.expectEqual(@as(u32, 240), sixteenth_grid.snapToGrid(240));
+    try t.expectEq(0, sixteenth_grid.snapToGrid(0));
+    try t.expectEq(120, sixteenth_grid.snapToGrid(120));
+    try t.expectEq(240, sixteenth_grid.snapToGrid(240));
 
     // Test rounding
-    try std.testing.expectEqual(@as(u32, 0), sixteenth_grid.snapToGrid(50)); // Round down
-    try std.testing.expectEqual(@as(u32, 120), sixteenth_grid.snapToGrid(70)); // Round up
-    try std.testing.expectEqual(@as(u32, 120), sixteenth_grid.snapToGrid(100)); // Round up
-    try std.testing.expectEqual(@as(u32, 240), sixteenth_grid.snapToGrid(200)); // Round up
+    try t.expectEq(0, sixteenth_grid.snapToGrid(50)); // Round down
+    try t.expectEq(120, sixteenth_grid.snapToGrid(70)); // Round up
+    try t.expectEq(120, sixteenth_grid.snapToGrid(100)); // Round up
+    try t.expectEq(240, sixteenth_grid.snapToGrid(200)); // Round up
 }
 
 test "Quantization error calculation" {
     const grid = QuantizationGrid.init(480, .eighth);
 
     // Test exact positions (no error)
-    try std.testing.expectEqual(@as(i32, 0), grid.calculateError(0));
-    try std.testing.expectEqual(@as(i32, 0), grid.calculateError(240));
+    try t.expectEq(0, grid.calculateError(0));
+    try t.expectEq(0, grid.calculateError(240));
 
     // Test positions with error
-    try std.testing.expectEqual(@as(i32, 50), grid.calculateError(50)); // 50 - 0 = 50
-    try std.testing.expectEqual(@as(i32, -70), grid.calculateError(170)); // 170 - 240 = -70
+    try t.expectEq(50, grid.calculateError(50)); // 50 - 0 = 50
+    try t.expectEq(-70, grid.calculateError(170)); // 170 - 240 = -70
 }
 
 test "Quantizer with adjustable strength" {
@@ -217,32 +218,32 @@ test "Quantizer with adjustable strength" {
     const grid = quantizer.grids[2]; // 16th note grid
 
     // Test 100% strength (default)
-    try std.testing.expectEqual(@as(u32, 120), quantizer.quantizeTick(100, grid));
+    try t.expectEq(120, quantizer.quantizeTick(100, grid));
 
     // Test 0% strength (no quantization)
     quantizer.setStrength(0);
-    try std.testing.expectEqual(@as(u32, 100), quantizer.quantizeTick(100, grid));
+    try t.expectEq(100, quantizer.quantizeTick(100, grid));
 
     // Test 50% strength (halfway between original and quantized)
     quantizer.setStrength(50);
     const result = quantizer.quantizeTick(100, grid);
     // Original: 100, Quantized: 120, Expected: 110
-    try std.testing.expectEqual(@as(u32, 110), result);
+    try t.expectEq(110, result);
 
     // Test 75% strength
     quantizer.setStrength(75);
     const result75 = quantizer.quantizeTick(100, grid);
     // Original: 100, Quantized: 120, 75% of 20 = 15, Expected: 115
-    try std.testing.expectEqual(@as(u32, 115), result75);
+    try t.expectEq(115, result75);
 }
 
 test "Default quantize method uses 16th grid" {
     const quantizer = Quantizer.init(std.testing.allocator, 480);
 
     // Should use 16th note grid (120 ticks)
-    try std.testing.expectEqual(@as(u32, 0), quantizer.quantize(50));
-    try std.testing.expectEqual(@as(u32, 120), quantizer.quantize(100));
-    try std.testing.expectEqual(@as(u32, 240), quantizer.quantize(200));
+    try t.expectEq(0, quantizer.quantize(50));
+    try t.expectEq(120, quantizer.quantize(100));
+    try t.expectEq(240, quantizer.quantize(200));
 }
 
 test "Best grid selection based on note density" {
@@ -250,22 +251,22 @@ test "Best grid selection based on note density" {
 
     // Test sparse notes (should select quarter grid)
     const sparse_times = [_]u32{ 0, 1000, 2000, 3000 };
-    try std.testing.expectEqual(GridSubdivision.quarter, quantizer.selectBestGrid(&sparse_times));
+    try t.expectEq(GridSubdivision.quarter, quantizer.selectBestGrid(&sparse_times));
 
     // Test medium density (should select eighth grid)
     const medium_times = [_]u32{ 0, 500, 1000, 1500 };
-    try std.testing.expectEqual(GridSubdivision.eighth, quantizer.selectBestGrid(&medium_times));
+    try t.expectEq(GridSubdivision.eighth, quantizer.selectBestGrid(&medium_times));
 
     // Test dense notes (should select sixteenth grid)
     const dense_times = [_]u32{ 0, 100, 200, 300, 400 };
-    try std.testing.expectEqual(GridSubdivision.sixteenth, quantizer.selectBestGrid(&dense_times));
+    try t.expectEq(GridSubdivision.sixteenth, quantizer.selectBestGrid(&dense_times));
 
     // Test edge cases
     const single = [_]u32{100};
-    try std.testing.expectEqual(GridSubdivision.sixteenth, quantizer.selectBestGrid(&single));
+    try t.expectEq(GridSubdivision.sixteenth, quantizer.selectBestGrid(&single));
 
     const empty = [_]u32{};
-    try std.testing.expectEqual(GridSubdivision.sixteenth, quantizer.selectBestGrid(&empty));
+    try t.expectEq(GridSubdivision.sixteenth, quantizer.selectBestGrid(&empty));
 }
 
 test "Performance: quantization speed" {
@@ -285,5 +286,5 @@ test "Performance: quantization speed" {
     const ns_per_note = elapsed_ns / iterations;
 
     // Performance target: < 100μs = 100,000ns per note
-    try std.testing.expect(ns_per_note < 100_000);
+    try t.expect(ns_per_note < 100_000);
 }

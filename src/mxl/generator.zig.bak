@@ -1,5 +1,4 @@
 const std = @import("std");
-const containers = @import("../utils/containers.zig");
 const log = @import("../utils/log.zig");
 const XmlWriter = @import("xml_writer.zig").XmlWriter;
 const Attribute = @import("xml_writer.zig").Attribute;
@@ -880,7 +879,7 @@ pub const Generator = struct {
         chord_groups: []const chord_detector.ChordGroup,
         start_index: usize,
         measure_state: *MeasureState,
-        notes_list: *containers.List(enhanced_note.EnhancedTimedNote),
+        notes_list: *std.ArrayList(enhanced_note.EnhancedTimedNote),
     ) !usize {
         _ = self; // Currently unused
         var chord_index = start_index;
@@ -967,7 +966,7 @@ pub const Generator = struct {
             const start_chord_index = chord_index;
 
             // BUG #2 FIX: Collect notes for this measure and check for multiple voices
-            var measure_notes = containers.List(enhanced_note.EnhancedTimedNote).init(self.allocator);
+            var measure_notes = std.ArrayList(enhanced_note.EnhancedTimedNote).init(self.allocator);
             defer measure_notes.deinit();
 
             // Create a temporary measure state to track what fits in this measure
@@ -1173,13 +1172,13 @@ pub const Generator = struct {
     /// Used by generateMeasureWithVoices for proper multi-voice MusicXML generation
     const VoiceGroup = struct {
         voice_number: u8,
-        notes: containers.List(enhanced_note.EnhancedTimedNote),
+        notes: std.ArrayList(enhanced_note.EnhancedTimedNote),
         total_duration: u32,
 
         pub fn init(allocator: std.mem.Allocator, voice_number: u8) VoiceGroup {
             return VoiceGroup{
                 .voice_number = voice_number,
-                .notes = containers.List(enhanced_note.EnhancedTimedNote).init(allocator),
+                .notes = std.ArrayList(enhanced_note.EnhancedTimedNote).init(allocator),
                 .total_duration = 0,
             };
         }
@@ -1218,11 +1217,11 @@ pub const Generator = struct {
         self: *const Generator,
         allocator: std.mem.Allocator,
         notes: []const enhanced_note.EnhancedTimedNote,
-    ) !containers.List(VoiceGroup) {
+    ) !std.ArrayList(VoiceGroup) {
         _ = self; // Unused parameter
 
         // Use a hash map to collect notes by voice number
-        var voice_map = containers.AutoMap(u8, VoiceGroup).init(allocator);
+        var voice_map = std.AutoHashMap(u8, VoiceGroup).init(allocator);
         defer voice_map.deinit();
 
         // Group notes by voice number
@@ -1241,7 +1240,7 @@ pub const Generator = struct {
         }
 
         // Convert hash map to sorted array list
-        var voice_groups = containers.List(VoiceGroup).init(allocator);
+        var voice_groups = std.ArrayList(VoiceGroup).init(allocator);
         var iterator = voice_map.iterator();
         while (iterator.next()) |entry| {
             try voice_groups.append(entry.value_ptr.*);
@@ -1628,7 +1627,7 @@ pub const Generator = struct {
 };
 
 test "XML header generation" {
-    var buffer = containers.List(u8).init(std.testing.allocator);
+    var buffer = std.ArrayList(u8).init(std.testing.allocator);
     defer buffer.deinit();
 
     const generator = Generator.init(std.testing.allocator, 480);
@@ -1641,7 +1640,7 @@ test "XML header generation" {
 }
 
 test "generate minimal valid MusicXML" {
-    var buffer = containers.List(u8).init(std.testing.allocator);
+    var buffer = std.ArrayList(u8).init(std.testing.allocator);
     defer buffer.deinit();
 
     const generator = Generator.init(std.testing.allocator, 480);
@@ -1670,7 +1669,7 @@ test "generate minimal valid MusicXML" {
 }
 
 test "generate minimal MusicXML with notes" {
-    var buffer = containers.List(u8).init(std.testing.allocator);
+    var buffer = std.ArrayList(u8).init(std.testing.allocator);
     defer buffer.deinit();
 
     const generator = Generator.init(std.testing.allocator, 480);
@@ -1694,7 +1693,7 @@ test "generate minimal MusicXML with notes" {
 }
 
 test "generateBackupElement basic functionality" {
-    var buffer = containers.List(u8).init(std.testing.allocator);
+    var buffer = std.ArrayList(u8).init(std.testing.allocator);
     defer buffer.deinit();
 
     var xml_writer = XmlWriter.init(std.testing.allocator, buffer.writer().any());
@@ -1714,7 +1713,7 @@ test "generateBackupElement basic functionality" {
 }
 
 test "generateBackupElement with different durations" {
-    var buffer = containers.List(u8).init(std.testing.allocator);
+    var buffer = std.ArrayList(u8).init(std.testing.allocator);
     defer buffer.deinit();
 
     var xml_writer = XmlWriter.init(std.testing.allocator, buffer.writer().any());
@@ -1745,7 +1744,7 @@ test "generateBackupElement with different durations" {
 }
 
 test "generateBackupElement with zero duration" {
-    var buffer = containers.List(u8).init(std.testing.allocator);
+    var buffer = std.ArrayList(u8).init(std.testing.allocator);
     defer buffer.deinit();
 
     var xml_writer = XmlWriter.init(std.testing.allocator, buffer.writer().any());
@@ -1865,7 +1864,7 @@ test "groupNotesByVoice with unassigned voice defaults to 1" {
 
 test "performance - minimal MusicXML generation" {
     // Test that generation meets performance target (< 10ms)
-    var buffer = containers.List(u8).init(std.testing.allocator);
+    var buffer = std.ArrayList(u8).init(std.testing.allocator);
     defer buffer.deinit();
 
     const generator = Generator.init(std.testing.allocator, 480);
@@ -1992,7 +1991,7 @@ test "note type toString" {
 }
 
 test "generate single note element" {
-    var buffer = containers.List(u8).init(std.testing.allocator);
+    var buffer = std.ArrayList(u8).init(std.testing.allocator);
     defer buffer.deinit();
 
     const generator = Generator.init(std.testing.allocator, 480);
@@ -2018,7 +2017,7 @@ test "generate single note element" {
 }
 
 test "generate note with accidental" {
-    var buffer = containers.List(u8).init(std.testing.allocator);
+    var buffer = std.ArrayList(u8).init(std.testing.allocator);
     defer buffer.deinit();
 
     const generator = Generator.init(std.testing.allocator, 480);
@@ -2035,7 +2034,7 @@ test "generate note with accidental" {
 }
 
 test "generate rest element" {
-    var buffer = containers.List(u8).init(std.testing.allocator);
+    var buffer = std.ArrayList(u8).init(std.testing.allocator);
     defer buffer.deinit();
 
     const generator = Generator.init(std.testing.allocator, 480);
@@ -2056,7 +2055,7 @@ test "generate rest element" {
 }
 
 test "generate notes from MIDI events" {
-    var buffer = containers.List(u8).init(std.testing.allocator);
+    var buffer = std.ArrayList(u8).init(std.testing.allocator);
     defer buffer.deinit();
 
     const generator = Generator.init(std.testing.allocator, 480);
@@ -2098,7 +2097,7 @@ test "generate notes from MIDI events" {
 
 test "performance - note element generation" {
     // Test that note generation meets performance target (< 1μs per note)
-    var buffer = containers.List(u8).init(std.testing.allocator);
+    var buffer = std.ArrayList(u8).init(std.testing.allocator);
     defer buffer.deinit();
 
     const generator = Generator.init(std.testing.allocator, 480);
@@ -2126,7 +2125,7 @@ test "performance - note element generation" {
 // Tests for automatic stem direction integration
 
 test "stem direction in basic note generation" {
-    var buffer = containers.List(u8).init(std.testing.allocator);
+    var buffer = std.ArrayList(u8).init(std.testing.allocator);
     defer buffer.deinit();
 
     const generator = Generator.init(std.testing.allocator, 480);
@@ -2153,7 +2152,7 @@ test "stem direction in basic note generation" {
 }
 
 test "stem direction in note with attributes" {
-    var buffer = containers.List(u8).init(std.testing.allocator);
+    var buffer = std.ArrayList(u8).init(std.testing.allocator);
     defer buffer.deinit();
 
     const generator = Generator.init(std.testing.allocator, 480);
@@ -2178,7 +2177,7 @@ test "stem direction in note with attributes" {
 }
 
 test "stem direction not included for rests" {
-    var buffer = containers.List(u8).init(std.testing.allocator);
+    var buffer = std.ArrayList(u8).init(std.testing.allocator);
     defer buffer.deinit();
 
     const generator = Generator.init(std.testing.allocator, 480);
@@ -2196,7 +2195,7 @@ test "stem direction not included for rests" {
 }
 
 test "polyphonic voice stem directions" {
-    var buffer = containers.List(u8).init(std.testing.allocator);
+    var buffer = std.ArrayList(u8).init(std.testing.allocator);
     defer buffer.deinit();
 
     const generator = Generator.init(std.testing.allocator, 480);
@@ -2280,7 +2279,7 @@ test "MeasureState - different time signatures" {
 }
 
 test "generate MusicXML with measure boundaries" {
-    var buffer = containers.List(u8).init(std.testing.allocator);
+    var buffer = std.ArrayList(u8).init(std.testing.allocator);
     defer buffer.deinit();
 
     const generator = Generator.init(std.testing.allocator, 480);

@@ -13,6 +13,7 @@
 //! Educational: Clear dynamic contrast for students to see musical shape
 
 const std = @import("std");
+const containers = @import("../utils/containers.zig");
 
 // Define a local NoteEvent for testing, import from events.zig when used in main code
 pub const NoteEvent = if (@import("builtin").is_test) struct {
@@ -253,7 +254,7 @@ pub const DynamicsMapper = struct {
     /// Process a sequence of notes and generate dynamic markings
     /// Implements TASK-044 per musical_intelligence_algorithms.md Section 8.1 lines 1368-1378
     pub fn processNotes(self: *DynamicsMapper, notes: []const NoteEvent) ![]DynamicMarking {
-        var markings = std.ArrayList(DynamicMarking).init(self.allocator);
+        var markings = containers.List(DynamicMarking).init(self.allocator);
         errdefer markings.deinit();
 
         if (notes.len == 0) return markings.toOwnedSlice();
@@ -543,7 +544,7 @@ test "Performance: mapping speed meets target" {
 }
 
 test "XML generation for dynamic marking" {
-    var buffer = std.ArrayList(u8).init(std.testing.allocator);
+    var buffer = containers.List(u8).init(std.testing.allocator);
     defer buffer.deinit();
 
     const marking = DynamicMarking{

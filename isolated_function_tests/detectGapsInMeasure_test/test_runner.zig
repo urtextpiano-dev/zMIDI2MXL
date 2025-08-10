@@ -1,4 +1,5 @@
 const std = @import("std");
+const t = @import("../../src/test_utils.zig");
 
 // ============================================================================
 // REQUIRED STRUCTS AND DEPENDENCIES
@@ -465,10 +466,10 @@ test "detectGapsInMeasure - empty measure" {
     const gaps = try detectGapsInMeasure(&processor, measure);
     defer std.testing.allocator.free(gaps);
     
-    try std.testing.expectEqual(@as(usize, 1), gaps.len);
-    try std.testing.expectEqual(@as(u32, 0), gaps[0].start_time);
-    try std.testing.expectEqual(@as(u32, 1920), gaps[0].duration);
-    try std.testing.expectEqual(@as(u32, 1), gaps[0].measure_number);
+    try t.expectEq(@as(usize, 1), gaps.len);
+    try t.expectEq(@as(u32, 0), gaps[0].start_time);
+    try t.expectEq(@as(u32, 1920), gaps[0].duration);
+    try t.expectEq(@as(u32, 1), gaps[0].measure_number);
 }
 
 test "detectGapsInMeasure - single note with gaps" {
@@ -505,13 +506,13 @@ test "detectGapsInMeasure - single note with gaps" {
     const gaps = try detectGapsInMeasure(&processor, measure);
     defer std.testing.allocator.free(gaps);
     
-    try std.testing.expectEqual(@as(usize, 2), gaps.len);
+    try t.expectEq(@as(usize, 2), gaps.len);
     // First gap: 0-480
-    try std.testing.expectEqual(@as(u32, 0), gaps[0].start_time);
-    try std.testing.expectEqual(@as(u32, 480), gaps[0].duration);
+    try t.expectEq(@as(u32, 0), gaps[0].start_time);
+    try t.expectEq(@as(u32, 480), gaps[0].duration);
     // Second gap: 960-1920
-    try std.testing.expectEqual(@as(u32, 960), gaps[1].start_time);
-    try std.testing.expectEqual(@as(u32, 960), gaps[1].duration);
+    try t.expectEq(@as(u32, 960), gaps[1].start_time);
+    try t.expectEq(@as(u32, 960), gaps[1].duration);
 }
 
 test "detectGapsInMeasure - no gaps" {
@@ -548,7 +549,7 @@ test "detectGapsInMeasure - no gaps" {
     const gaps = try detectGapsInMeasure(&processor, measure);
     defer std.testing.allocator.free(gaps);
     
-    try std.testing.expectEqual(@as(usize, 0), gaps.len);
+    try t.expectEq(@as(usize, 0), gaps.len);
 }
 
 test "detectGapsInMeasure - rest notes ignored" {
@@ -586,9 +587,9 @@ test "detectGapsInMeasure - rest notes ignored" {
     defer std.testing.allocator.free(gaps);
     
     // Should detect a gap for the entire measure since rest notes are ignored
-    try std.testing.expectEqual(@as(usize, 1), gaps.len);
-    try std.testing.expectEqual(@as(u32, 0), gaps[0].start_time);
-    try std.testing.expectEqual(@as(u32, 1920), gaps[0].duration);
+    try t.expectEq(@as(usize, 1), gaps.len);
+    try t.expectEq(@as(u32, 0), gaps[0].start_time);
+    try t.expectEq(@as(u32, 1920), gaps[0].duration);
 }
 
 test "detectGapsInMeasure - sorting works correctly" {
@@ -636,11 +637,11 @@ test "detectGapsInMeasure - sorting works correctly" {
     const gaps = try detectGapsInMeasure(&processor, measure);
     defer std.testing.allocator.free(gaps);
     
-    try std.testing.expectEqual(@as(usize, 2), gaps.len);
+    try t.expectEq(@as(usize, 2), gaps.len);
     // Gap between notes: 480-960
-    try std.testing.expectEqual(@as(u32, 480), gaps[0].start_time);
-    try std.testing.expectEqual(@as(u32, 480), gaps[0].duration);
+    try t.expectEq(@as(u32, 480), gaps[0].start_time);
+    try t.expectEq(@as(u32, 480), gaps[0].duration);
     // Gap at end: 1440-1920
-    try std.testing.expectEqual(@as(u32, 1440), gaps[1].start_time);
-    try std.testing.expectEqual(@as(u32, 480), gaps[1].duration);
+    try t.expectEq(@as(u32, 1440), gaps[1].start_time);
+    try t.expectEq(@as(u32, 480), gaps[1].duration);
 }

@@ -1,4 +1,5 @@
 const std = @import("std");
+const containers = @import("utils/containers.zig");
 
 // Implements TASK-002 per MIDI_Architecture_Reference.md Section 10.1 lines 1213-1244
 // Custom error types for the MIDI to MXL converter
@@ -96,13 +97,13 @@ pub const ErrorContext = struct {
 
 // Error handler for managing errors during processing
 pub const ErrorHandler = struct {
-    errors: std.ArrayList(ErrorContext),
+    errors: containers.List(ErrorContext),
     strict_mode: bool,
     allocator: std.mem.Allocator,
     
     pub fn init(allocator: std.mem.Allocator, strict: bool) ErrorHandler {
         return .{
-            .errors = std.ArrayList(ErrorContext).init(allocator),
+            .errors = containers.List(ErrorContext).init(allocator),
             .strict_mode = strict,
             .allocator = allocator,
         };

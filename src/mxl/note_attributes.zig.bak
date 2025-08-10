@@ -1,5 +1,4 @@
 const std = @import("std");
-const containers = @import("../utils/containers.zig");
 const log = @import("../utils/log.zig");
 const xmlh = @import("xml_helpers.zig");
 const XmlWriter = @import("xml_writer.zig").XmlWriter;
@@ -348,7 +347,7 @@ test "NoteAttributeGenerator - initialization" {
 
 test "NoteAttributeGenerator - write time signature" {
     const allocator = std.testing.allocator;
-    var buffer = containers.List(u8).init(allocator);
+    var buffer = std.ArrayList(u8).init(allocator);
     defer buffer.deinit();
     
     const attr_generator = NoteAttributeGenerator.init(allocator, 480);
@@ -367,7 +366,7 @@ test "NoteAttributeGenerator - write time signature" {
 
 test "NoteAttributeGenerator - write tempo direction" {
     const allocator = std.testing.allocator;
-    var buffer = containers.List(u8).init(allocator);
+    var buffer = std.ArrayList(u8).init(allocator);
     defer buffer.deinit();
     
     const attr_generator = NoteAttributeGenerator.init(allocator, 480);
@@ -393,7 +392,7 @@ test "NoteAttributeGenerator - write tempo direction" {
 
 test "NoteAttributeGenerator - write measure with attributes" {
     const allocator = std.testing.allocator;
-    var buffer = containers.List(u8).init(allocator);
+    var buffer = std.ArrayList(u8).init(allocator);
     defer buffer.deinit();
     
     const attr_generator = NoteAttributeGenerator.init(allocator, 480);
@@ -429,7 +428,7 @@ test "TempoMarking - from BPM" {
 test "NoteAttributeGenerator - performance test" {
     // Test that attribute generation meets performance target (< 2μs per note)
     const allocator = std.testing.allocator;
-    var buffer = containers.List(u8).init(allocator);
+    var buffer = std.ArrayList(u8).init(allocator);
     defer buffer.deinit();
     
     const attr_generator = NoteAttributeGenerator.init(allocator, 480);

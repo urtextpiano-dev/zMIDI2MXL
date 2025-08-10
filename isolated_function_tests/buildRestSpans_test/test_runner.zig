@@ -1,4 +1,5 @@
 const std = @import("std");
+const t = @import("../../src/test_utils.zig");
 
 // Minimal mock structures needed for testing
 const TimedNote = struct {
@@ -261,10 +262,10 @@ test "buildRestSpans - adjacent rests merge" {
         std.testing.allocator.free(spans);
     }
     
-    try std.testing.expectEqual(@as(usize, 1), spans.len);
-    try std.testing.expectEqual(@as(u32, 0), spans[0].start_tick);
-    try std.testing.expectEqual(@as(u32, 960), spans[0].end_tick);
-    try std.testing.expectEqual(@as(usize, 2), spans[0].note_indices.items.len);
+    try t.expectEq(@as(usize, 1), spans.len);
+    try t.expectEq(@as(u32, 0), spans[0].start_tick);
+    try t.expectEq(@as(u32, 960), spans[0].end_tick);
+    try t.expectEq(@as(usize, 2), spans[0].note_indices.items.len);
 }
 
 test "buildRestSpans - non-adjacent rests separate" {
@@ -288,13 +289,13 @@ test "buildRestSpans - non-adjacent rests separate" {
         std.testing.allocator.free(spans);
     }
     
-    try std.testing.expectEqual(@as(usize, 2), spans.len);
-    try std.testing.expectEqual(@as(u32, 0), spans[0].start_tick);
-    try std.testing.expectEqual(@as(u32, 480), spans[0].end_tick);
-    try std.testing.expectEqual(true, spans[0].is_optimized_rest);
-    try std.testing.expectEqual(@as(u32, 960), spans[1].start_tick);
-    try std.testing.expectEqual(@as(u32, 1440), spans[1].end_tick);
-    try std.testing.expectEqual(false, spans[1].is_optimized_rest);
+    try t.expectEq(@as(usize, 2), spans.len);
+    try t.expectEq(@as(u32, 0), spans[0].start_tick);
+    try t.expectEq(@as(u32, 480), spans[0].end_tick);
+    try t.expectEq(true, spans[0].is_optimized_rest);
+    try t.expectEq(@as(u32, 960), spans[1].start_tick);
+    try t.expectEq(@as(u32, 1440), spans[1].end_tick);
+    try t.expectEq(false, spans[1].is_optimized_rest);
 }
 
 test "buildRestSpans - empty input" {
@@ -308,7 +309,7 @@ test "buildRestSpans - empty input" {
     const spans = try processor.buildRestSpans(&notes);
     defer std.testing.allocator.free(spans);
     
-    try std.testing.expectEqual(@as(usize, 0), spans.len);
+    try t.expectEq(@as(usize, 0), spans.len);
 }
 
 test "buildRestSpans - no rests" {
@@ -325,7 +326,7 @@ test "buildRestSpans - no rests" {
     const spans = try processor.buildRestSpans(&notes);
     defer std.testing.allocator.free(spans);
     
-    try std.testing.expectEqual(@as(usize, 0), spans.len);
+    try t.expectEq(@as(usize, 0), spans.len);
 }
 
 test "buildRestSpans - overlapping rests" {
@@ -350,8 +351,8 @@ test "buildRestSpans - overlapping rests" {
         std.testing.allocator.free(spans);
     }
     
-    try std.testing.expectEqual(@as(usize, 1), spans.len);
-    try std.testing.expectEqual(@as(u32, 0), spans[0].start_tick);
-    try std.testing.expectEqual(@as(u32, 960), spans[0].end_tick);
-    try std.testing.expectEqual(@as(usize, 3), spans[0].note_indices.items.len);
+    try t.expectEq(@as(usize, 1), spans.len);
+    try t.expectEq(@as(u32, 0), spans[0].start_tick);
+    try t.expectEq(@as(u32, 960), spans[0].end_tick);
+    try t.expectEq(@as(usize, 3), spans[0].note_indices.items.len);
 }

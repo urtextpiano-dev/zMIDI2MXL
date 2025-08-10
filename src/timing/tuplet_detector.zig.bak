@@ -1,5 +1,4 @@
 const std = @import("std");
-const containers = @import("../utils/containers.zig");
 const log = @import("../utils/log.zig");
 const t = @import("../test_utils.zig");
 
@@ -190,7 +189,7 @@ pub const TupletDetector = struct {
     ) ![]Tuplet {
         if (notes.len < 2) return &[_]Tuplet{};
         
-        var detected_tuplets = containers.List(Tuplet).init(self.allocator);
+        var detected_tuplets = std.ArrayList(Tuplet).init(self.allocator);
         errdefer detected_tuplets.deinit();
         
         // Group notes by potential tuplet divisions
@@ -313,7 +312,7 @@ pub const TupletDetector = struct {
         beats_per_measure: u8,
         beat_length_ticks: u32,
     ) ![]Tuplet {
-        var all_tuplets = containers.List(Tuplet).init(self.allocator);
+        var all_tuplets = std.ArrayList(Tuplet).init(self.allocator);
         errdefer all_tuplets.deinit();
         
         // Process each beat separately
@@ -322,7 +321,7 @@ pub const TupletDetector = struct {
             const beat_end = beat_start + beat_length_ticks;
             
             // Find notes that fall within this beat
-            var beat_notes = containers.List(measure_detector.TimedNote).init(self.allocator);
+            var beat_notes = std.ArrayList(measure_detector.TimedNote).init(self.allocator);
             defer beat_notes.deinit();
             
             for (notes) |note| {
@@ -478,7 +477,7 @@ test "TupletDetector - initialization" {
 test "TupletType - ratios and strings" {
     try t.expectEq(3, TupletType.triplet.getActualCount());
     try t.expectEq(2, TupletType.triplet.getNormalCount());
-    try t.expectStrEq("triplet", TupletType.triplet.toString());
+    try t.expectEqStrings("triplet", TupletType.triplet.toString());
     
     try t.expectEq(5, TupletType.quintuplet.getActualCount());
     try t.expectEq(4, TupletType.quintuplet.getNormalCount());
@@ -571,10 +570,10 @@ test "TupletDetector - timing tolerance" {
 }
 
 test "determineBeatUnit - various beat lengths" {
-    try t.expectStrEq("quarter", determineBeatUnit(480, 480));
-    try t.expectStrEq("eighth", determineBeatUnit(240, 480));
-    try t.expectStrEq("16th", determineBeatUnit(120, 480));
-    try t.expectStrEq("32nd", determineBeatUnit(60, 480));
+    try t.expectEqStrings("quarter", determineBeatUnit(480, 480));
+    try t.expectEqStrings("eighth", determineBeatUnit(240, 480));
+    try t.expectEqStrings("16th", determineBeatUnit(120, 480));
+    try t.expectEqStrings("32nd", determineBeatUnit(60, 480));
 }
 
 test "isPowerOfTwo helper function" {

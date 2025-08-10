@@ -21,7 +21,6 @@
 //! Performance target: < 1ms per measure per TASK-048
 
 const std = @import("std");
-const containers = @import("../utils/containers.zig");
 const log = @import("../utils/log.zig");
 const measure_detector = @import("measure_detector.zig");
 const note_type_converter = @import("note_type_converter.zig");
@@ -69,7 +68,7 @@ pub const BeamedNote = struct {
     /// Note type information
     note_type: note_type_converter.NoteTypeResult,
     /// Beam information for each level (can have multiple for 16ths, 32nds)
-    beams: containers.List(BeamInfo),
+    beams: std.ArrayList(BeamInfo),
     /// Whether this note can be beamed (eighth note or shorter)
     can_beam: bool,
     /// Beat position within measure (0.0 = start of measure)
@@ -82,7 +81,7 @@ pub const BeamedNote = struct {
         note_type: note_type_converter.NoteTypeResult,
         beat_position: f64,
     ) !BeamedNote {
-        var beams = containers.List(BeamInfo).init(allocator);
+        var beams = std.ArrayList(BeamInfo).init(allocator);
         // Pre-allocate capacity for common case (most notes have <= 3 beam levels)
         try beams.ensureTotalCapacity(3);
         
@@ -104,7 +103,7 @@ pub const BeamedNote = struct {
 /// Beam group representing connected notes
 pub const BeamGroup = struct {
     /// Notes in this beam group
-    notes: containers.List(BeamedNote),
+    notes: std.ArrayList(BeamedNote),
     /// Start beat position
     start_beat: f64,
     /// End beat position  
@@ -112,7 +111,7 @@ pub const BeamGroup = struct {
     
     /// Initialize beam group
     pub fn init(allocator: std.mem.Allocator) BeamGroup {
-        var notes = containers.List(BeamedNote).init(allocator);
+        var notes = std.ArrayList(BeamedNote).init(allocator);
         // Pre-allocate capacity for common case (typically 2-4 notes per beam)
         notes.ensureTotalCapacity(4) catch {}; // Ignore error, will allocate on demand
         
@@ -215,7 +214,7 @@ pub const BeamGrouper = struct {
             self.allocator;
             
         // Create beam groups without intermediate BeamedNote array
-        var groups = containers.List(BeamGroup).init(alloc);
+        var groups = std.ArrayList(BeamGroup).init(alloc);
         errdefer {
             for (groups.items) |*group| {
                 group.deinit();
@@ -305,7 +304,7 @@ pub const BeamGrouper = struct {
         _ = beat_length;
         _ = beats_per_measure;
         const alloc = if (self.educational_arena) |arena| arena.allocator() else self.allocator;
-        var groups = containers.List(BeamGroup).init(alloc);
+        var groups = std.ArrayList(BeamGroup).init(alloc);
         errdefer {
             for (groups.items) |*group| {
                 group.deinit();
@@ -372,7 +371,7 @@ pub const BeamGrouper = struct {
         _ = beat_length;
         _ = beats_per_measure;
         const alloc = if (self.educational_arena) |arena| arena.allocator() else self.allocator;
-        var groups = containers.List(BeamGroup).init(alloc);
+        var groups = std.ArrayList(BeamGroup).init(alloc);
         errdefer {
             for (groups.items) |*group| {
                 group.deinit();
@@ -431,7 +430,7 @@ pub const BeamGrouper = struct {
         _ = beat_length;
         _ = compound_beats;
         const alloc = if (self.educational_arena) |arena| arena.allocator() else self.allocator;
-        var groups = containers.List(BeamGroup).init(alloc);
+        var groups = std.ArrayList(BeamGroup).init(alloc);
         errdefer {
             for (groups.items) |*group| {
                 group.deinit();
@@ -497,7 +496,7 @@ pub const BeamGrouper = struct {
         _ = beat_length;
         _ = beats_per_measure;
         const alloc = if (self.educational_arena) |arena| arena.allocator() else self.allocator;
-        var groups = containers.List(BeamGroup).init(alloc);
+        var groups = std.ArrayList(BeamGroup).init(alloc);
         errdefer {
             for (groups.items) |*group| {
                 group.deinit();
@@ -569,7 +568,7 @@ pub const BeamGrouper = struct {
         _ = beat_length;
         _ = beats_per_measure;
         const alloc = if (self.educational_arena) |arena| arena.allocator() else self.allocator;
-        var groups = containers.List(BeamGroup).init(alloc);
+        var groups = std.ArrayList(BeamGroup).init(alloc);
         errdefer {
             for (groups.items) |*group| {
                 group.deinit();
@@ -1028,8 +1027,8 @@ test "BeamGrouper - performance benchmark" {
     const avg_ms = @as(f64, @floatFromInt(avg_ns)) / 1_000_000.0;
     
     log.debug("\nBeamGrouper Performance: {d:.3} ms per measure (target: < 1.000 ms)", .{avg_ms});
-    log.debug("  Status: {s}", .{if (avg_ns < target_ns) "PASS ✓" else "FAIL ✗"});
-    log.debug("  Time per note: {d:.3} μs", .{@as(f64, @floatFromInt(avg_ns)) / 11.0 / 1000.0});
+    std.debug.print("  Status: {s}\n", .{if (avg_ns < target_ns) "PASS ✓" else "FAIL ✗"});
+    std.debug.print("  Time per note: {d:.3} μs\n", .{@as(f64, @floatFromInt(avg_ns)) / 11.0 / 1000.0});
     
     // Test should pass if under 1ms
     try std.testing.expect(avg_ns < target_ns);

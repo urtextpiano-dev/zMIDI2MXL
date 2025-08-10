@@ -1,5 +1,9 @@
 const std = @import("std");
+const containers = @import("../utils/containers.zig");
+const log = @import("../utils/log.zig");
 const error_mod = @import("../error.zig");
+const binary_reader = @import("../utils/binary_reader.zig");
+const t = @import("../test_utils.zig");
 
 /// MIDI parser module - handles parsing of MIDI files
 pub const Parser = struct {
@@ -120,56 +124,56 @@ test "VLQ parsing - basic examples from MIDI spec" {
     {
         const data = [_]u8{0x00};
         const result = try parseVlq(&data);
-        try std.testing.expectEqual(@as(u32, 0), result.value);
-        try std.testing.expectEqual(@as(u8, 1), result.bytes_read);
+        try t.expectEq(0, result.value);
+        try t.expectEq(1, result.bytes_read);
     }
 
     // Decimal 127 -> VLQ: 0x7F
     {
         const data = [_]u8{0x7F};
         const result = try parseVlq(&data);
-        try std.testing.expectEqual(@as(u32, 127), result.value);
-        try std.testing.expectEqual(@as(u8, 1), result.bytes_read);
+        try t.expectEq(127, result.value);
+        try t.expectEq(1, result.bytes_read);
     }
 
     // Decimal 128 -> VLQ: 0x81 0x00
     {
         const data = [_]u8{ 0x81, 0x00 };
         const result = try parseVlq(&data);
-        try std.testing.expectEqual(@as(u32, 128), result.value);
-        try std.testing.expectEqual(@as(u8, 2), result.bytes_read);
+        try t.expectEq(128, result.value);
+        try t.expectEq(2, result.bytes_read);
     }
 
     // Decimal 255 -> VLQ: 0x81 0x7F
     {
         const data = [_]u8{ 0x81, 0x7F };
         const result = try parseVlq(&data);
-        try std.testing.expectEqual(@as(u32, 255), result.value);
-        try std.testing.expectEqual(@as(u8, 2), result.bytes_read);
+        try t.expectEq(255, result.value);
+        try t.expectEq(2, result.bytes_read);
     }
 
     // Decimal 8192 -> VLQ: 0xC0 0x00
     {
         const data = [_]u8{ 0xC0, 0x00 };
         const result = try parseVlq(&data);
-        try std.testing.expectEqual(@as(u32, 8192), result.value);
-        try std.testing.expectEqual(@as(u8, 2), result.bytes_read);
+        try t.expectEq(8192, result.value);
+        try t.expectEq(2, result.bytes_read);
     }
 
     // Decimal 16383 -> VLQ: 0xFF 0x7F
     {
         const data = [_]u8{ 0xFF, 0x7F };
         const result = try parseVlq(&data);
-        try std.testing.expectEqual(@as(u32, 16383), result.value);
-        try std.testing.expectEqual(@as(u8, 2), result.bytes_read);
+        try t.expectEq(16383, result.value);
+        try t.expectEq(2, result.bytes_read);
     }
 
     // Decimal 16384 -> VLQ: 0x81 0x80 0x00
     {
         const data = [_]u8{ 0x81, 0x80, 0x00 };
         const result = try parseVlq(&data);
-        try std.testing.expectEqual(@as(u32, 16384), result.value);
-        try std.testing.expectEqual(@as(u8, 3), result.bytes_read);
+        try t.expectEq(16384, result.value);
+        try t.expectEq(3, result.bytes_read);
     }
 }
 
@@ -178,16 +182,16 @@ test "VLQ parsing - maximum values and edge cases" {
     {
         const data = [_]u8{ 0xFF, 0xFF, 0xFF, 0x7F };
         const result = try parseVlq(&data);
-        try std.testing.expectEqual(@as(u32, 0x0FFFFFFF), result.value);
-        try std.testing.expectEqual(@as(u8, 4), result.bytes_read);
+        try t.expectEq(0x0FFFFFFF, result.value);
+        try t.expectEq(4, result.bytes_read);
     }
 
     // Test value just under maximum
     {
         const data = [_]u8{ 0xFF, 0xFF, 0xFF, 0x7E };
         const result = try parseVlq(&data);
-        try std.testing.expectEqual(@as(u32, 0x0FFFFFFE), result.value);
-        try std.testing.expectEqual(@as(u8, 4), result.bytes_read);
+        try t.expectEq(0x0FFFFFFE, result.value);
+        try t.expectEq(4, result.bytes_read);
     }
 }
 
@@ -196,21 +200,21 @@ test "VLQ parsing - error conditions" {
     {
         const data = [_]u8{};
         const result = parseVlq(&data);
-        try std.testing.expectError(error_mod.MidiError.UnexpectedEndOfFile, result);
+        try t.expectErr(error_mod.MidiError.UnexpectedEndOfFile, result);
     }
 
     // Truncated VLQ (continuation bit set but no more data)
     {
         const data = [_]u8{0x81}; // Continuation set but missing next byte
         const result = parseVlq(&data);
-        try std.testing.expectError(error_mod.MidiError.UnexpectedEndOfFile, result);
+        try t.expectErr(error_mod.MidiError.UnexpectedEndOfFile, result);
     }
 
     // VLQ too long (5 bytes with continuation bits)
     {
         const data = [_]u8{ 0x81, 0x81, 0x81, 0x81, 0x00 };
         const result = parseVlq(&data);
-        try std.testing.expectError(error_mod.MidiError.InvalidVlqEncoding, result);
+        try t.expectErr(error_mod.MidiError.InvalidVlqEncoding, result);
     }
 
     // Value would exceed maximum (attempt to encode > 0x0FFFFFFF)
@@ -218,7 +222,7 @@ test "VLQ parsing - error conditions" {
     {
         const data = [_]u8{ 0x81, 0x80, 0x80, 0x80 }; // All continuation bits set on 4 bytes
         const result = parseVlq(&data);
-        try std.testing.expectError(error_mod.MidiError.InvalidVlqEncoding, result); // Too many continuation bytes
+        try t.expectErr(error_mod.MidiError.InvalidVlqEncoding, result); // Too many continuation bytes
     }
 }
 
@@ -227,23 +231,23 @@ test "VLQ fast parser optimization" {
     {
         const data = [_]u8{0x42};
         const result = try parseVlqFast(&data);
-        try std.testing.expectEqual(@as(u32, 0x42), result.value);
-        try std.testing.expectEqual(@as(u8, 1), result.bytes_read);
+        try t.expectEq(0x42, result.value);
+        try t.expectEq(1, result.bytes_read);
     }
 
     // Test that multi-byte values fall back to standard parser
     {
         const data = [_]u8{ 0x81, 0x00 };
         const result = try parseVlqFast(&data);
-        try std.testing.expectEqual(@as(u32, 128), result.value);
-        try std.testing.expectEqual(@as(u8, 2), result.bytes_read);
+        try t.expectEq(128, result.value);
+        try t.expectEq(2, result.bytes_read);
     }
 
     // Verify fast parser handles errors the same way
     {
         const data = [_]u8{};
         const result = parseVlqFast(&data);
-        try std.testing.expectError(error_mod.MidiError.UnexpectedEndOfFile, result);
+        try t.expectErr(error_mod.MidiError.UnexpectedEndOfFile, result);
     }
 }
 
@@ -252,16 +256,16 @@ test "VLQ parsing - additional boundary conditions" {
     {
         const data = [_]u8{ 0x81, 0x00 };
         const result = try parseVlq(&data);
-        try std.testing.expectEqual(@as(u32, 128), result.value);
-        try std.testing.expectEqual(@as(u8, 2), result.bytes_read);
+        try t.expectEq(128, result.value);
+        try t.expectEq(2, result.bytes_read);
     }
 
     // Test large 3-byte value
     {
         const data = [_]u8{ 0x81, 0xFF, 0x7F }; // Should decode to (1 << 14) + (0x7F << 7) + 0x7F = 16384 + 16256 + 127 = 32767
         const result = try parseVlq(&data);
-        try std.testing.expectEqual(@as(u32, 32767), result.value);
-        try std.testing.expectEqual(@as(u8, 3), result.bytes_read);
+        try t.expectEq(32767, result.value);
+        try t.expectEq(3, result.bytes_read);
     }
 }
 
@@ -283,11 +287,11 @@ test "VLQ performance benchmark - target < 10ns per decode" {
 
     // Verify we meet the performance target of < 10ns per decode
     // This is a soft requirement since actual performance depends on hardware
-    std.debug.print("VLQ decode performance: {d} ns per decode\n", .{ns_per_decode});
+    log.perf("VLQ decode", ns_per_decode, "ns per decode");
 
     // Test should not fail on performance, but log the result
     // In production, this would be < 10ns on modern hardware
-    try std.testing.expect(ns_per_decode < 100); // Relaxed for CI/test environments
+    try t.expect(ns_per_decode < 100); // Relaxed for CI/test environments
 }
 
 // Implements TASK-021 per MIDI_Architecture_Reference.md Section 6.1 lines 749-785
@@ -342,8 +346,8 @@ pub const OrphanedNote = struct {
 pub const NoteDurationTracker = struct {
     allocator: std.mem.Allocator,
     active_notes: std.HashMap(NoteKey, ActiveNoteInfo, NoteKeyContext, std.hash_map.default_max_load_percentage),
-    completed_notes: std.ArrayList(NoteWithDuration),
-    orphaned_notes: std.ArrayList(OrphanedNote),
+    completed_notes: containers.List(NoteWithDuration),
+    orphaned_notes: containers.List(OrphanedNote),
 
     const NoteKeyContext = struct {
         pub fn hash(self: @This(), key: NoteKey) u64 {
@@ -362,8 +366,8 @@ pub const NoteDurationTracker = struct {
         return .{
             .allocator = allocator,
             .active_notes = std.HashMap(NoteKey, ActiveNoteInfo, NoteKeyContext, std.hash_map.default_max_load_percentage).init(allocator),
-            .completed_notes = std.ArrayList(NoteWithDuration).init(allocator),
-            .orphaned_notes = std.ArrayList(OrphanedNote).init(allocator),
+            .completed_notes = containers.List(NoteWithDuration).init(allocator),
+            .orphaned_notes = containers.List(OrphanedNote).init(allocator),
         };
     }
 
@@ -513,13 +517,13 @@ test "MIDI channel mapping - internal to display conversion" {
     for (0..16) |internal| {
         const internal_channel: MidiChannelInternal = @intCast(internal);
         const display_channel = channelToDisplay(internal_channel);
-        try std.testing.expectEqual(@as(MidiChannelDisplay, @intCast(internal + 1)), display_channel);
+        try t.expectEq(@as(MidiChannelDisplay, @intCast(internal + 1)), display_channel);
     }
 
     // Test specific cases mentioned in documentation
-    try std.testing.expectEqual(@as(MidiChannelDisplay, 1), channelToDisplay(0)); // Channel 0 -> 1
-    try std.testing.expectEqual(@as(MidiChannelDisplay, 10), channelToDisplay(9)); // Channel 9 -> 10 (drums)
-    try std.testing.expectEqual(@as(MidiChannelDisplay, 16), channelToDisplay(15)); // Channel 15 -> 16
+    try t.expectEq(1, channelToDisplay(0)); // Channel 0 -> 1
+    try t.expectEq(10, channelToDisplay(9)); // Channel 9 -> 10 (drums)
+    try t.expectEq(16, channelToDisplay(15)); // Channel 15 -> 16
 }
 
 test "MIDI channel mapping - display to internal conversion" {
@@ -527,13 +531,13 @@ test "MIDI channel mapping - display to internal conversion" {
     for (1..17) |display| {
         const display_channel: MidiChannelDisplay = @intCast(display);
         const internal_channel = channelToInternal(display_channel);
-        try std.testing.expectEqual(@as(MidiChannelInternal, @intCast(display - 1)), internal_channel);
+        try t.expectEq(@as(MidiChannelInternal, @intCast(display - 1)), internal_channel);
     }
 
     // Test specific cases mentioned in documentation
-    try std.testing.expectEqual(@as(MidiChannelInternal, 0), channelToInternal(1)); // Display 1 -> 0
-    try std.testing.expectEqual(@as(MidiChannelInternal, 9), channelToInternal(10)); // Display 10 -> 9 (drums)
-    try std.testing.expectEqual(@as(MidiChannelInternal, 15), channelToInternal(16)); // Display 16 -> 15
+    try t.expectEq(0, channelToInternal(1)); // Display 1 -> 0
+    try t.expectEq(9, channelToInternal(10)); // Display 10 -> 9 (drums)
+    try t.expectEq(15, channelToInternal(16)); // Display 16 -> 15
 }
 
 test "MIDI channel mapping - bidirectional consistency" {
@@ -541,14 +545,14 @@ test "MIDI channel mapping - bidirectional consistency" {
     for (0..16) |internal| {
         const original: MidiChannelInternal = @intCast(internal);
         const converted = channelToInternal(channelToDisplay(original));
-        try std.testing.expectEqual(original, converted);
+        try t.expectEq(original, converted);
     }
 
     // Test that converting display -> internal -> display preserves original value
     for (1..17) |display| {
         const original: MidiChannelDisplay = @intCast(display);
         const converted = channelToDisplay(channelToInternal(original));
-        try std.testing.expectEqual(original, converted);
+        try t.expectEq(original, converted);
     }
 }
 
@@ -556,20 +560,20 @@ test "MIDI channel validation - display channel range" {
     // Test valid display channels (1-16)
     for (1..17) |channel| {
         const display_channel: MidiChannelDisplay = @intCast(channel);
-        try std.testing.expect(isValidDisplayChannel(display_channel));
+        try t.expect(isValidDisplayChannel(display_channel));
     }
 
     // Test invalid display channels
-    try std.testing.expect(!isValidDisplayChannel(0)); // Below range
-    try std.testing.expect(!isValidDisplayChannel(17)); // Above range
-    try std.testing.expect(!isValidDisplayChannel(255)); // Way above range
+    try t.expectFalse(isValidDisplayChannel(0)); // Below range
+    try t.expectFalse(isValidDisplayChannel(17)); // Above range
+    try t.expectFalse(isValidDisplayChannel(255)); // Way above range
 }
 
 test "MIDI channel validation - internal channel range" {
     // Test all internal channels (0-15) - u4 type constraint ensures validity
     for (0..16) |channel| {
         const internal_channel: MidiChannelInternal = @intCast(channel);
-        try std.testing.expect(isValidInternalChannel(internal_channel));
+        try t.expect(isValidInternalChannel(internal_channel));
     }
 }
 
@@ -613,7 +617,7 @@ test "MIDI channel extraction from status bytes" {
 
     for (test_cases) |test_case| {
         const extracted_channel = extractChannelFromStatus(test_case.status_byte);
-        try std.testing.expectEqual(test_case.expected_channel, extracted_channel);
+        try t.expectEq(test_case.expected_channel, extracted_channel);
     }
 }
 
@@ -624,19 +628,19 @@ test "MIDI channel mapping - zero overhead verification" {
     // Test constant folding for known values
     const internal_zero: MidiChannelInternal = 0;
     const display_one = channelToDisplay(internal_zero);
-    try std.testing.expectEqual(@as(MidiChannelDisplay, 1), display_one);
+    try t.expectEq(1, display_one);
 
     const display_sixteen: MidiChannelDisplay = 16;
     const internal_fifteen = channelToInternal(display_sixteen);
-    try std.testing.expectEqual(@as(MidiChannelInternal, 15), internal_fifteen);
+    try t.expectEq(15, internal_fifteen);
 
     // Test validation functions
-    try std.testing.expect(isValidDisplayChannel(10));
-    try std.testing.expect(isValidInternalChannel(5));
+    try t.expect(isValidDisplayChannel(10));
+    try t.expect(isValidInternalChannel(5));
 
     // Test status byte extraction
     const channel = extractChannelFromStatus(0x95);
-    try std.testing.expectEqual(@as(MidiChannelInternal, 5), channel);
+    try t.expectEq(5, channel);
 }
 
 // Implements TASK-005 per MIDI_Architecture_Reference.md Section 1.2 lines 33-55
@@ -739,13 +743,13 @@ pub fn parseMidiHeader(data: []const u8) error_mod.MidiError!MidiHeader {
     }
 
     // Read and validate chunk length (must be 6)
-    const chunk_length = std.mem.readInt(u32, data[4..8], .big);
+    const chunk_length = binary_reader.readU32BE(data, 4);
     if (chunk_length != MTHD_LENGTH) {
         return error_mod.MidiError.InvalidHeaderLength;
     }
 
     // Parse format type (bytes 8-9)
-    const format_raw = std.mem.readInt(u16, data[8..10], .big);
+    const format_raw = binary_reader.readU16BE(data, 8);
     const format = switch (format_raw) {
         0 => MidiFormat.single_track,
         1 => MidiFormat.multi_track_sync,
@@ -754,10 +758,10 @@ pub fn parseMidiHeader(data: []const u8) error_mod.MidiError!MidiHeader {
     };
 
     // Parse track count (bytes 10-11)
-    const track_count = std.mem.readInt(u16, data[10..12], .big);
+    const track_count = binary_reader.readU16BE(data, 10);
 
     // Parse division field (bytes 12-13)
-    const division_raw = std.mem.readInt(u16, data[12..14], .big);
+    const division_raw = binary_reader.readU16BE(data, 12);
     const division = if ((division_raw & 0x8000) == 0) blk: {
         // Bit 15 = 0: Ticks per quarter note (15-bit value)
         const ticks = @as(u15, @intCast(division_raw & 0x7FFF));
@@ -803,10 +807,10 @@ test "MIDI header parsing - valid example from spec" {
 
     const header = try parseMidiHeader(&data);
 
-    try std.testing.expectEqual(MidiFormat.multi_track_sync, header.format);
-    try std.testing.expectEqual(@as(u16, 3), header.track_count);
-    try std.testing.expect(header.division.isTicksPerQuarter());
-    try std.testing.expectEqual(@as(u15, 96), header.division.getTicksPerQuarter().?);
+    try t.expectEq(MidiFormat.multi_track_sync, header.format);
+    try t.expectEq(3, header.track_count);
+    try t.expect(header.division.isTicksPerQuarter());
+    try t.expectEq(96, header.division.getTicksPerQuarter().?);
 }
 
 test "MIDI header parsing - all format types" {
@@ -821,8 +825,8 @@ test "MIDI header parsing - all format types" {
         };
 
         const header = try parseMidiHeader(&data);
-        try std.testing.expectEqual(MidiFormat.single_track, header.format);
-        try std.testing.expectEqual(@as(u16, 1), header.track_count);
+        try t.expectEq(MidiFormat.single_track, header.format);
+        try t.expectEq(1, header.track_count);
     }
 
     // Test Format 1 (multi-track synchronous)
@@ -836,8 +840,8 @@ test "MIDI header parsing - all format types" {
         };
 
         const header = try parseMidiHeader(&data);
-        try std.testing.expectEqual(MidiFormat.multi_track_sync, header.format);
-        try std.testing.expectEqual(@as(u16, 2), header.track_count);
+        try t.expectEq(MidiFormat.multi_track_sync, header.format);
+        try t.expectEq(2, header.track_count);
     }
 
     // Test Format 2 (multi-track asynchronous)
@@ -851,8 +855,8 @@ test "MIDI header parsing - all format types" {
         };
 
         const header = try parseMidiHeader(&data);
-        try std.testing.expectEqual(MidiFormat.multi_track_async, header.format);
-        try std.testing.expectEqual(@as(u16, 4), header.track_count);
+        try t.expectEq(MidiFormat.multi_track_async, header.format);
+        try t.expectEq(4, header.track_count);
     }
 }
 
@@ -869,10 +873,10 @@ test "MIDI header parsing - SMPTE division format" {
     };
 
     const header = try parseMidiHeader(&data);
-    try std.testing.expect(!header.division.isTicksPerQuarter());
-    try std.testing.expectEqual(@as(?u15, null), header.division.getTicksPerQuarter());
-    try std.testing.expectEqual(@as(i8, -24), header.division.smpte.format);
-    try std.testing.expectEqual(@as(u8, 80), header.division.smpte.ticks_per_frame);
+    try t.expectFalse(header.division.isTicksPerQuarter());
+    try t.expectEq(null, header.division.getTicksPerQuarter());
+    try t.expectEq(-24, header.division.smpte.format);
+    try t.expectEq(80, header.division.smpte.ticks_per_frame);
 }
 
 test "MIDI header parsing - various division values" {
@@ -895,8 +899,8 @@ test "MIDI header parsing - various division values" {
         };
 
         const header = try parseMidiHeader(&data);
-        try std.testing.expect(header.division.isTicksPerQuarter());
-        try std.testing.expectEqual(case.expected_ticks, header.division.getTicksPerQuarter().?);
+        try t.expect(header.division.isTicksPerQuarter());
+        try t.expectEq(case.expected_ticks, header.division.getTicksPerQuarter().?);
     }
 }
 
@@ -905,7 +909,7 @@ test "MIDI header parsing - error conditions" {
     {
         const data = [_]u8{ 0x4D, 0x54, 0x68, 0x64, 0x00, 0x00 }; // Only 6 bytes
         const result = parseMidiHeader(&data);
-        try std.testing.expectError(error_mod.MidiError.IncompleteHeader, result);
+        try t.expectErr(error_mod.MidiError.IncompleteHeader, result);
     }
 
     // Test invalid magic number
@@ -918,7 +922,7 @@ test "MIDI header parsing - error conditions" {
             0x00, 0x60, // 96 ticks per quarter note
         };
         const result = parseMidiHeader(&data);
-        try std.testing.expectError(error_mod.MidiError.InvalidMagicNumber, result);
+        try t.expectErr(error_mod.MidiError.InvalidMagicNumber, result);
     }
 
     // Test invalid chunk length
@@ -931,7 +935,7 @@ test "MIDI header parsing - error conditions" {
             0x00, 0x60, // 96 ticks per quarter note
         };
         const result = parseMidiHeader(&data);
-        try std.testing.expectError(error_mod.MidiError.InvalidHeaderLength, result);
+        try t.expectErr(error_mod.MidiError.InvalidHeaderLength, result);
     }
 
     // Test invalid format
@@ -944,7 +948,7 @@ test "MIDI header parsing - error conditions" {
             0x00, 0x60, // 96 ticks per quarter note
         };
         const result = parseMidiHeader(&data);
-        try std.testing.expectError(error_mod.MidiError.InvalidHeaderLength, result);
+        try t.expectErr(error_mod.MidiError.InvalidHeaderLength, result);
     }
 
     // Test Format 0 with wrong track count
@@ -957,7 +961,7 @@ test "MIDI header parsing - error conditions" {
             0x00, 0x60, // 96 ticks per quarter note
         };
         const result = parseMidiHeader(&data);
-        try std.testing.expectError(error_mod.MidiError.InvalidHeaderLength, result);
+        try t.expectErr(error_mod.MidiError.InvalidHeaderLength, result);
     }
 
     // Test zero track count
@@ -970,7 +974,7 @@ test "MIDI header parsing - error conditions" {
             0x00, 0x60, // 96 ticks per quarter note
         };
         const result = parseMidiHeader(&data);
-        try std.testing.expectError(error_mod.MidiError.InvalidHeaderLength, result);
+        try t.expectErr(error_mod.MidiError.InvalidHeaderLength, result);
     }
 }
 
@@ -994,8 +998,8 @@ test "MIDI header parsing - SMPTE format validation" {
         };
 
         const header = try parseMidiHeader(&data);
-        try std.testing.expectEqual(case.expected_format, header.division.smpte.format);
-        try std.testing.expectEqual(@as(u8, 80), header.division.smpte.ticks_per_frame);
+        try t.expectEq(case.expected_format, header.division.smpte.format);
+        try t.expectEq(80, header.division.smpte.ticks_per_frame);
     }
 
     // Test invalid SMPTE format (-23 fps is not valid)
@@ -1008,14 +1012,14 @@ test "MIDI header parsing - SMPTE format validation" {
             0x97, 0x50, // Invalid SMPTE: -23 fps (0x97 = bits 8-14 = 23), 80 ticks per frame
         };
         const result = parseMidiHeader(&data);
-        try std.testing.expectError(error_mod.MidiError.InvalidHeaderLength, result);
+        try t.expectErr(error_mod.MidiError.InvalidHeaderLength, result);
     }
 }
 
 test "MidiFormat toString functionality" {
-    try std.testing.expectEqualStrings("Type 0 (Single Track)", MidiFormat.single_track.toString());
-    try std.testing.expectEqualStrings("Type 1 (Multi-Track Synchronous)", MidiFormat.multi_track_sync.toString());
-    try std.testing.expectEqualStrings("Type 2 (Multi-Track Asynchronous)", MidiFormat.multi_track_async.toString());
+    try t.expectStrEq("Type 0 (Single Track)", MidiFormat.single_track.toString());
+    try t.expectStrEq("Type 1 (Multi-Track Synchronous)", MidiFormat.multi_track_sync.toString());
+    try t.expectStrEq("Type 2 (Multi-Track Asynchronous)", MidiFormat.multi_track_async.toString());
 }
 
 test "MIDI header parsing performance benchmark - target < 1μs" {
@@ -1042,11 +1046,11 @@ test "MIDI header parsing performance benchmark - target < 1μs" {
     const ns_per_parse = total_ns / iterations;
 
     // Verify we meet the performance target of < 1μs (1000ns) per header
-    std.debug.print("MIDI header parse performance: {d} ns per header\n", .{ns_per_parse});
+    log.perf("MIDI header parse", ns_per_parse, "ns per header");
 
     // Target is < 1μs = 1000ns per header parse
     // This should easily be achievable since we're just reading and validating 14 bytes
-    try std.testing.expect(ns_per_parse < 1000); // < 1μs target
+    try t.expect(ns_per_parse < 1000); // < 1μs target
 }
 
 // Implements TASK-006 per MIDI_Architecture_Reference.md Section 1.3 lines 63-70
@@ -1142,14 +1146,14 @@ pub const DEFAULT_TEMPO_MICROSECONDS: u32 = 500_000; // 120 BPM
 /// Tempo map for efficient absolute time calculations
 /// Provides O(log n) tempo lookup for any tick position
 pub const TempoMap = struct {
-    tempo_events: std.ArrayList(TempoEvent),
+    tempo_events: containers.List(TempoEvent),
     division: u16, // Ticks per quarter note from MIDI header
     allocator: std.mem.Allocator,
 
     /// Initialize tempo map with division from MIDI header
     pub fn init(allocator: std.mem.Allocator, division: u16) TempoMap {
         return .{
-            .tempo_events = std.ArrayList(TempoEvent).init(allocator),
+            .tempo_events = containers.List(TempoEvent).init(allocator),
             .division = division,
             .allocator = allocator,
         };
@@ -1413,6 +1417,7 @@ pub const TextEvent = struct {
             .cue_point => "Cue Point",
             .program_name => "Program Name",
             .device_name => "Device Name",
+            _ => "Unknown Text Type",
         };
     }
 
@@ -1469,6 +1474,7 @@ pub const ControlChangeEvent = struct {
             .sustain_pedal => "Sustain Pedal",
             .channel_volume => "Volume",
             .expression => "Expression",
+            _ => "Unknown Controller",
         };
     }
 
@@ -1812,17 +1818,17 @@ pub const PitchBendEvent = struct {
 /// Track parsing result containing all channel voice message events per TASK-016
 /// Extended for TASK-021 to include note duration tracking
 pub const TrackParseResult = struct {
-    note_events: std.ArrayList(NoteEvent),
-    tempo_events: std.ArrayList(TempoEvent), // Added for TASK-011/019
-    time_signature_events: std.ArrayList(TimeSignatureEvent), // Added for TASK-012/019
-    key_signature_events: std.ArrayList(KeySignatureEvent), // Added for TASK-013/019
-    text_events: std.ArrayList(TextEvent), // Added for TASK-019
-    control_change_events: std.ArrayList(ControlChangeEvent), // Added for TASK-014, extended for TASK-016
-    program_change_events: std.ArrayList(ProgramChangeEvent), // Added for TASK-015
-    polyphonic_pressure_events: std.ArrayList(PolyphonicPressureEvent), // Added for TASK-016
-    channel_pressure_events: std.ArrayList(ChannelPressureEvent), // Added for TASK-016
-    pitch_bend_events: std.ArrayList(PitchBendEvent), // Added for TASK-016
-    rpn_events: std.ArrayList(RpnEvent), // Added for TASK-018
+    note_events: containers.List(NoteEvent),
+    tempo_events: containers.List(TempoEvent), // Added for TASK-011/019
+    time_signature_events: containers.List(TimeSignatureEvent), // Added for TASK-012/019
+    key_signature_events: containers.List(KeySignatureEvent), // Added for TASK-013/019
+    text_events: containers.List(TextEvent), // Added for TASK-019
+    control_change_events: containers.List(ControlChangeEvent), // Added for TASK-014, extended for TASK-016
+    program_change_events: containers.List(ProgramChangeEvent), // Added for TASK-015
+    polyphonic_pressure_events: containers.List(PolyphonicPressureEvent), // Added for TASK-016
+    channel_pressure_events: containers.List(ChannelPressureEvent), // Added for TASK-016
+    pitch_bend_events: containers.List(PitchBendEvent), // Added for TASK-016
+    rpn_events: containers.List(RpnEvent), // Added for TASK-018
     note_duration_tracker: NoteDurationTracker, // Added for TASK-021
     track_length: u32,
     events_parsed: u32,
@@ -1868,7 +1874,7 @@ pub fn parseMtrkHeader(data: []const u8) error_mod.MidiError!struct { track_leng
     }
 
     // Read track length (big-endian)
-    const track_length = std.mem.readInt(u32, data[4..8], .big);
+    const track_length = binary_reader.readU32BE(data, 4);
 
     // Validate we have enough data for the complete track
     if (data.len < 8 + track_length) {
@@ -1915,17 +1921,17 @@ const TrackParserState = struct {
 /// Implements TASK-006, TASK-011/019, TASK-012/019, TASK-013/019, TASK-014, TASK-015, and TASK-016 per MIDI_Architecture_Reference.md Sections 1.3, 2.2, and 2.6
 pub fn parseTrackEvents(allocator: std.mem.Allocator, track_data: []const u8) (error_mod.MidiError || std.mem.Allocator.Error)!TrackParseResult {
     var result = TrackParseResult{
-        .note_events = std.ArrayList(NoteEvent).init(allocator),
-        .tempo_events = std.ArrayList(TempoEvent).init(allocator),
-        .time_signature_events = std.ArrayList(TimeSignatureEvent).init(allocator),
-        .key_signature_events = std.ArrayList(KeySignatureEvent).init(allocator),
-        .text_events = std.ArrayList(TextEvent).init(allocator),
-        .control_change_events = std.ArrayList(ControlChangeEvent).init(allocator),
-        .program_change_events = std.ArrayList(ProgramChangeEvent).init(allocator),
-        .polyphonic_pressure_events = std.ArrayList(PolyphonicPressureEvent).init(allocator),
-        .channel_pressure_events = std.ArrayList(ChannelPressureEvent).init(allocator),
-        .pitch_bend_events = std.ArrayList(PitchBendEvent).init(allocator),
-        .rpn_events = std.ArrayList(RpnEvent).init(allocator),
+        .note_events = containers.List(NoteEvent).init(allocator),
+        .tempo_events = containers.List(TempoEvent).init(allocator),
+        .time_signature_events = containers.List(TimeSignatureEvent).init(allocator),
+        .key_signature_events = containers.List(KeySignatureEvent).init(allocator),
+        .text_events = containers.List(TextEvent).init(allocator),
+        .control_change_events = containers.List(ControlChangeEvent).init(allocator),
+        .program_change_events = containers.List(ProgramChangeEvent).init(allocator),
+        .polyphonic_pressure_events = containers.List(PolyphonicPressureEvent).init(allocator),
+        .channel_pressure_events = containers.List(ChannelPressureEvent).init(allocator),
+        .pitch_bend_events = containers.List(PitchBendEvent).init(allocator),
+        .rpn_events = containers.List(RpnEvent).init(allocator),
         .note_duration_tracker = NoteDurationTracker.init(allocator), // Added for TASK-021
         .track_length = @intCast(track_data.len),
         .events_parsed = 0,
@@ -2314,8 +2320,8 @@ fn skipSysExEvent(state: *TrackParserState) error_mod.MidiError!bool {
 /// Log manufacturer ID for System Exclusive messages
 /// Implements TASK-020 manufacturer ID logging requirement
 fn logManufacturerId(manufacturer_id: []const u8) void {
-    const log = @import("../log.zig");
-    const logger = log.getLogger();
+    const log_mod = @import("../log.zig");
+    const logger = log_mod.getLogger();
 
     switch (manufacturer_id.len) {
         1 => {
@@ -2581,8 +2587,8 @@ test "MTrk header parsing - valid header" {
     } ++ [_]u8{0} ** 16; // Pad with 16 bytes of track data
 
     const header = try parseMtrkHeader(&data);
-    try std.testing.expectEqual(@as(u32, 16), header.track_length);
-    try std.testing.expectEqual(@as(usize, 8), header.track_data_offset);
+    try t.expectEq(16, header.track_length);
+    try t.expectEq(8, header.track_data_offset);
 }
 
 test "MTrk header parsing - error conditions" {
@@ -2590,7 +2596,7 @@ test "MTrk header parsing - error conditions" {
     {
         const data = [_]u8{ 0x4D, 0x54, 0x72 }; // Only 3 bytes
         const result = parseMtrkHeader(&data);
-        try std.testing.expectError(error_mod.MidiError.IncompleteHeader, result);
+        try t.expectErr(error_mod.MidiError.IncompleteHeader, result);
     }
 
     // Wrong magic number
@@ -2600,7 +2606,7 @@ test "MTrk header parsing - error conditions" {
             0x00, 0x00, 0x00, 0x08,
         } ++ [_]u8{0} ** 8;
         const result = parseMtrkHeader(&data);
-        try std.testing.expectError(error_mod.MidiError.InvalidChunkType, result);
+        try t.expectErr(error_mod.MidiError.InvalidChunkType, result);
     }
 
     // Incomplete track data
@@ -2611,7 +2617,7 @@ test "MTrk header parsing - error conditions" {
             0x00, 0x00, 0x00, 0x00,
         };
         const result = parseMtrkHeader(&data);
-        try std.testing.expectError(error_mod.MidiError.IncompleteData, result);
+        try t.expectErr(error_mod.MidiError.IncompleteData, result);
     }
 }
 
@@ -2633,29 +2639,29 @@ test "Note event parsing - basic Note On/Off" {
     var result = try parseTrackEvents(allocator, &track_data);
     defer result.deinit(allocator);
 
-    try std.testing.expectEqual(@as(u32, 2), result.events_parsed);
-    try std.testing.expectEqual(@as(u32, 1), result.events_skipped); // End of Track
-    try std.testing.expectEqual(@as(usize, 2), result.note_events.items.len);
+    try t.expectEq(2, result.events_parsed);
+    try t.expectEq(1, result.events_skipped); // End of Track
+    try t.expectEq(2, result.note_events.items.len);
 
     // Check first event (Note On)
     const note_on = result.note_events.items[0];
-    try std.testing.expectEqual(MidiEventType.note_on, note_on.event_type);
-    try std.testing.expectEqual(@as(u4, 0), note_on.channel);
-    try std.testing.expectEqual(@as(u8, 0x3C), note_on.note);
-    try std.testing.expectEqual(@as(u8, 0x64), note_on.velocity);
-    try std.testing.expectEqual(@as(u32, 0), note_on.tick);
-    try std.testing.expect(note_on.isNoteOn());
-    try std.testing.expect(!note_on.isNoteOff());
+    try t.expectEq(MidiEventType.note_on, note_on.event_type);
+    try t.expectEq(0, note_on.channel);
+    try t.expectEq(0x3C, note_on.note);
+    try t.expectEq(0x64, note_on.velocity);
+    try t.expectEq(0, note_on.tick);
+    try t.expect(note_on.isNoteOn());
+    try t.expectFalse(note_on.isNoteOff());
 
     // Check second event (Note Off)
     const note_off = result.note_events.items[1];
-    try std.testing.expectEqual(MidiEventType.note_off, note_off.event_type);
-    try std.testing.expectEqual(@as(u4, 0), note_off.channel);
-    try std.testing.expectEqual(@as(u8, 0x3C), note_off.note);
-    try std.testing.expectEqual(@as(u8, 0x40), note_off.velocity);
-    try std.testing.expectEqual(@as(u32, 96), note_off.tick);
-    try std.testing.expect(!note_off.isNoteOn());
-    try std.testing.expect(note_off.isNoteOff());
+    try t.expectEq(MidiEventType.note_off, note_off.event_type);
+    try t.expectEq(0, note_off.channel);
+    try t.expectEq(0x3C, note_off.note);
+    try t.expectEq(0x40, note_off.velocity);
+    try t.expectEq(96, note_off.tick);
+    try t.expectFalse(note_off.isNoteOn());
+    try t.expect(note_off.isNoteOff());
 }
 
 test "Note event parsing - Note On with velocity 0 as Note Off" {
@@ -2676,17 +2682,17 @@ test "Note event parsing - Note On with velocity 0 as Note Off" {
     var result = try parseTrackEvents(allocator, &track_data);
     defer result.deinit(allocator);
 
-    try std.testing.expectEqual(@as(usize, 2), result.note_events.items.len);
+    try t.expectEq(2, result.note_events.items.len);
 
     // First event should be Note On
-    try std.testing.expect(result.note_events.items[0].isNoteOn());
+    try t.expect(result.note_events.items[0].isNoteOn());
 
     // Second event should be Note Off (velocity 0)
     const note_off = result.note_events.items[1];
-    try std.testing.expectEqual(MidiEventType.note_on, note_off.event_type);
-    try std.testing.expectEqual(@as(u8, 0), note_off.velocity);
-    try std.testing.expect(!note_off.isNoteOn());
-    try std.testing.expect(note_off.isNoteOff());
+    try t.expectEq(MidiEventType.note_on, note_off.event_type);
+    try t.expectEq(0, note_off.velocity);
+    try t.expectFalse(note_off.isNoteOn());
+    try t.expect(note_off.isNoteOff());
 }
 
 // TASK-021 Note Duration Tracker Tests
@@ -2708,19 +2714,19 @@ test "Note Duration Tracker - basic Note On/Off matching" {
     defer result.deinit(allocator);
 
     // Should have 1 completed note and 0 orphaned notes
-    try std.testing.expectEqual(@as(u32, 1), result.note_duration_tracker.getCompletedNotesCount());
-    try std.testing.expectEqual(@as(u32, 0), result.note_duration_tracker.getOrphanedNotesCount());
+    try t.expectEq(1, result.note_duration_tracker.getCompletedNotesCount());
+    try t.expectEq(0, result.note_duration_tracker.getOrphanedNotesCount());
 
     // Check completed note
     const completed_note = result.note_duration_tracker.completed_notes.items[0];
-    try std.testing.expectEqual(@as(u4, 0), completed_note.channel);
-    try std.testing.expectEqual(@as(u8, 0x3C), completed_note.note);
-    try std.testing.expectEqual(@as(u8, 100), completed_note.on_velocity);
-    try std.testing.expectEqual(@as(u8, 64), completed_note.off_velocity);
-    try std.testing.expectEqual(@as(u32, 0), completed_note.on_tick);
-    try std.testing.expectEqual(@as(u32, 96), completed_note.off_tick);
-    try std.testing.expectEqual(@as(u32, 96), completed_note.duration_ticks);
-    try std.testing.expectEqual(@as(u32, 96), completed_note.getDurationTicks());
+    try t.expectEq(0, completed_note.channel);
+    try t.expectEq(0x3C, completed_note.note);
+    try t.expectEq(100, completed_note.on_velocity);
+    try t.expectEq(64, completed_note.off_velocity);
+    try t.expectEq(0, completed_note.on_tick);
+    try t.expectEq(96, completed_note.off_tick);
+    try t.expectEq(96, completed_note.duration_ticks);
+    try t.expectEq(96, completed_note.getDurationTicks());
 }
 
 test "Note Duration Tracker - velocity 0 as Note Off" {
@@ -2739,14 +2745,14 @@ test "Note Duration Tracker - velocity 0 as Note Off" {
     defer result.deinit(allocator);
 
     // Should have 1 completed note and 0 orphaned notes
-    try std.testing.expectEqual(@as(u32, 1), result.note_duration_tracker.getCompletedNotesCount());
-    try std.testing.expectEqual(@as(u32, 0), result.note_duration_tracker.getOrphanedNotesCount());
+    try t.expectEq(1, result.note_duration_tracker.getCompletedNotesCount());
+    try t.expectEq(0, result.note_duration_tracker.getOrphanedNotesCount());
 
     // Check completed note
     const completed_note = result.note_duration_tracker.completed_notes.items[0];
-    try std.testing.expectEqual(@as(u8, 100), completed_note.on_velocity);
-    try std.testing.expectEqual(@as(u8, 64), completed_note.off_velocity); // Default for velocity 0
-    try std.testing.expectEqual(@as(u32, 48), completed_note.duration_ticks);
+    try t.expectEq(100, completed_note.on_velocity);
+    try t.expectEq(64, completed_note.off_velocity); // Default for velocity 0
+    try t.expectEq(48, completed_note.duration_ticks);
 }
 
 test "Note Duration Tracker - orphaned notes" {
@@ -2766,20 +2772,20 @@ test "Note Duration Tracker - orphaned notes" {
     defer result.deinit(allocator);
 
     // Should have 1 completed note (D4) and 1 orphaned note (C4)
-    try std.testing.expectEqual(@as(u32, 1), result.note_duration_tracker.getCompletedNotesCount());
-    try std.testing.expectEqual(@as(u32, 1), result.note_duration_tracker.getOrphanedNotesCount());
+    try t.expectEq(1, result.note_duration_tracker.getCompletedNotesCount());
+    try t.expectEq(1, result.note_duration_tracker.getOrphanedNotesCount());
 
     // Check completed note (D4)
     const completed_note = result.note_duration_tracker.completed_notes.items[0];
-    try std.testing.expectEqual(@as(u8, 0x3E), completed_note.note);
-    try std.testing.expectEqual(@as(u32, 32), completed_note.duration_ticks); // 48 - 16 = 32
+    try t.expectEq(0x3E, completed_note.note);
+    try t.expectEq(32, completed_note.duration_ticks); // 48 - 16 = 32
 
     // Check orphaned note (C4)
     const orphaned_note = result.note_duration_tracker.orphaned_notes.items[0];
-    try std.testing.expectEqual(@as(u4, 0), orphaned_note.channel);
-    try std.testing.expectEqual(@as(u8, 0x3C), orphaned_note.note);
-    try std.testing.expectEqual(@as(u8, 100), orphaned_note.on_velocity);
-    try std.testing.expectEqual(@as(u32, 0), orphaned_note.on_tick);
+    try t.expectEq(0, orphaned_note.channel);
+    try t.expectEq(0x3C, orphaned_note.note);
+    try t.expectEq(100, orphaned_note.on_velocity);
+    try t.expectEq(0, orphaned_note.on_tick);
 }
 
 test "Note Duration Tracker - overlapping notes" {
@@ -2799,19 +2805,19 @@ test "Note Duration Tracker - overlapping notes" {
     defer result.deinit(allocator);
 
     // Should have 1 completed note (second Note On) and 1 orphaned note (first Note On)
-    try std.testing.expectEqual(@as(u32, 1), result.note_duration_tracker.getCompletedNotesCount());
-    try std.testing.expectEqual(@as(u32, 1), result.note_duration_tracker.getOrphanedNotesCount());
+    try t.expectEq(1, result.note_duration_tracker.getCompletedNotesCount());
+    try t.expectEq(1, result.note_duration_tracker.getOrphanedNotesCount());
 
     // Check completed note (second Note On)
     const completed_note = result.note_duration_tracker.completed_notes.items[0];
-    try std.testing.expectEqual(@as(u8, 112), completed_note.on_velocity);
-    try std.testing.expectEqual(@as(u32, 16), completed_note.on_tick);
-    try std.testing.expectEqual(@as(u32, 32), completed_note.duration_ticks); // 48 - 16 = 32
+    try t.expectEq(112, completed_note.on_velocity);
+    try t.expectEq(16, completed_note.on_tick);
+    try t.expectEq(32, completed_note.duration_ticks); // 48 - 16 = 32
 
     // Check orphaned note (first Note On)
     const orphaned_note = result.note_duration_tracker.orphaned_notes.items[0];
-    try std.testing.expectEqual(@as(u8, 100), orphaned_note.on_velocity);
-    try std.testing.expectEqual(@as(u32, 0), orphaned_note.on_tick);
+    try t.expectEq(100, orphaned_note.on_velocity);
+    try t.expectEq(0, orphaned_note.on_tick);
 }
 
 test "Note Duration Tracker - multiple channels" {
@@ -2832,18 +2838,18 @@ test "Note Duration Tracker - multiple channels" {
     defer result.deinit(allocator);
 
     // Should have 2 completed notes and 0 orphaned notes
-    try std.testing.expectEqual(@as(u32, 2), result.note_duration_tracker.getCompletedNotesCount());
-    try std.testing.expectEqual(@as(u32, 0), result.note_duration_tracker.getOrphanedNotesCount());
+    try t.expectEq(2, result.note_duration_tracker.getCompletedNotesCount());
+    try t.expectEq(0, result.note_duration_tracker.getOrphanedNotesCount());
 
     // Check first completed note (channel 0)
     const note_ch0 = result.note_duration_tracker.completed_notes.items[0];
-    try std.testing.expectEqual(@as(u4, 0), note_ch0.channel);
-    try std.testing.expectEqual(@as(u32, 48), note_ch0.duration_ticks); // 48 - 0 = 48
+    try t.expectEq(0, note_ch0.channel);
+    try t.expectEq(48, note_ch0.duration_ticks); // 48 - 0 = 48
 
     // Check second completed note (channel 1)
     const note_ch1 = result.note_duration_tracker.completed_notes.items[1];
-    try std.testing.expectEqual(@as(u4, 1), note_ch1.channel);
-    try std.testing.expectEqual(@as(u32, 48), note_ch1.duration_ticks); // 64 - 16 = 48
+    try t.expectEq(1, note_ch1.channel);
+    try t.expectEq(48, note_ch1.duration_ticks); // 64 - 16 = 48
 }
 
 test "Note Duration Tracker - O(1) performance" {
@@ -2852,7 +2858,7 @@ test "Note Duration Tracker - O(1) performance" {
     const allocator = gpa.allocator();
 
     // Create large track with many overlapping notes for performance testing
-    var track_data = std.ArrayList(u8).init(allocator);
+    var track_data = containers.List(u8).init(allocator);
     defer track_data.deinit();
 
     // Add 100 Note On events for different notes on channel 0
@@ -2886,14 +2892,14 @@ test "Note Duration Tracker - O(1) performance" {
     const duration_us = @as(f64, @floatFromInt(duration_ns)) / 1000.0;
 
     // Should have processed all notes correctly
-    try std.testing.expectEqual(@as(u32, 12), result.note_duration_tracker.getCompletedNotesCount()); // 12 unique notes
-    try std.testing.expectEqual(@as(u32, 88), result.note_duration_tracker.getOrphanedNotesCount()); // 100 - 12 = 88 overlapping
+    try t.expectEq(12, result.note_duration_tracker.getCompletedNotesCount()); // 12 unique notes
+    try t.expectEq(88, result.note_duration_tracker.getOrphanedNotesCount()); // 100 - 12 = 88 overlapping
 
     // Basic performance check - should process in reasonable time
-    std.debug.print("Note duration tracking time: {d:.2} μs for 200 events\n", .{duration_us});
+    log.perf("Note duration tracking", duration_us, "μs for 200 events");
 
     // This is a rough performance test - O(1) HashMap operations should scale well
-    try std.testing.expect(duration_us < 10000.0); // Should complete in under 10ms
+    try t.expect(duration_us < 10000.0); // Should complete in under 10ms
 }
 
 test "Track parsing - running status support" {
@@ -2922,25 +2928,25 @@ test "Track parsing - running status support" {
     var result = try parseTrackEvents(allocator, &track_data);
     defer result.deinit(allocator);
 
-    try std.testing.expectEqual(@as(usize, 6), result.note_events.items.len);
+    try t.expectEq(6, result.note_events.items.len);
 
     // Check that running status worked correctly
     const events = result.note_events.items;
 
     // First three should be Note On events for C4, E4, G4
-    try std.testing.expectEqual(@as(u8, 0x3C), events[0].note); // C4
-    try std.testing.expectEqual(@as(u8, 0x40), events[1].note); // E4
-    try std.testing.expectEqual(@as(u8, 0x43), events[2].note); // G4
+    try t.expectEq(0x3C, events[0].note); // C4
+    try t.expectEq(0x40, events[1].note); // E4
+    try t.expectEq(0x43, events[2].note); // G4
 
     // All should be at tick 0
-    try std.testing.expectEqual(@as(u32, 0), events[0].tick);
-    try std.testing.expectEqual(@as(u32, 0), events[1].tick);
-    try std.testing.expectEqual(@as(u32, 0), events[2].tick);
+    try t.expectEq(0, events[0].tick);
+    try t.expectEq(0, events[1].tick);
+    try t.expectEq(0, events[2].tick);
 
     // Last three should be Note Off events at tick 96
-    try std.testing.expectEqual(@as(u32, 96), events[3].tick);
-    try std.testing.expectEqual(@as(u32, 96), events[4].tick);
-    try std.testing.expectEqual(@as(u32, 96), events[5].tick);
+    try t.expectEq(96, events[3].tick);
+    try t.expectEq(96, events[4].tick);
+    try t.expectEq(96, events[5].tick);
 }
 
 test "Track parsing - parse note, tempo, and control change events" {
@@ -2971,33 +2977,33 @@ test "Track parsing - parse note, tempo, and control change events" {
     defer result.deinit(allocator);
 
     // Should have extracted 2 note events, 1 tempo event, and 1 control change event
-    try std.testing.expectEqual(@as(usize, 2), result.note_events.items.len);
-    try std.testing.expectEqual(@as(usize, 1), result.tempo_events.items.len);
-    try std.testing.expectEqual(@as(usize, 0), result.time_signature_events.items.len);
-    try std.testing.expectEqual(@as(usize, 1), result.control_change_events.items.len);
-    try std.testing.expectEqual(@as(usize, 1), result.program_change_events.items.len);
-    try std.testing.expectEqual(@as(u32, 6), result.events_parsed); // 2 notes + 1 tempo + 1 control change + 1 program change + 1 pitch bend
-    try std.testing.expectEqual(@as(u32, 1), result.events_skipped); // End of Track only
+    try t.expectEq(2, result.note_events.items.len);
+    try t.expectEq(1, result.tempo_events.items.len);
+    try t.expectEq(0, result.time_signature_events.items.len);
+    try t.expectEq(1, result.control_change_events.items.len);
+    try t.expectEq(1, result.program_change_events.items.len);
+    try t.expectEq(6, result.events_parsed); // 2 notes + 1 tempo + 1 control change + 1 program change + 1 pitch bend
+    try t.expectEq(1, result.events_skipped); // End of Track only
 
     const events = result.note_events.items;
-    try std.testing.expectEqual(@as(u8, 0x3C), events[0].note);
-    try std.testing.expectEqual(@as(u8, 0x3C), events[1].note);
-    try std.testing.expect(events[0].isNoteOn());
-    try std.testing.expect(events[1].isNoteOff());
+    try t.expectEq(0x3C, events[0].note);
+    try t.expectEq(0x3C, events[1].note);
+    try t.expect(events[0].isNoteOn());
+    try t.expect(events[1].isNoteOff());
 
     // Check control change event
     const cc_event = result.control_change_events.items[0];
-    try std.testing.expectEqual(@as(u32, 0), cc_event.tick);
-    try std.testing.expectEqual(@as(u4, 0), cc_event.channel);
-    try std.testing.expectEqual(@as(u7, 7), cc_event.controller); // Volume
-    try std.testing.expectEqual(@as(u7, 0x7F), cc_event.value);
+    try t.expectEq(0, cc_event.tick);
+    try t.expectEq(0, cc_event.channel);
+    try t.expectEq(7, cc_event.controller); // Volume
+    try t.expectEq(0x7F, cc_event.value);
 
     // Check program change event
     const pc_event = result.program_change_events.items[0];
-    try std.testing.expectEqual(@as(u32, 0), pc_event.tick);
-    try std.testing.expectEqual(@as(u4, 0), pc_event.channel);
-    try std.testing.expectEqual(@as(u7, 1), pc_event.program);
-    try std.testing.expectEqualStrings("Bright Acoustic Piano", pc_event.getInstrumentName());
+    try t.expectEq(0, pc_event.tick);
+    try t.expectEq(0, pc_event.channel);
+    try t.expectEq(1, pc_event.program);
+    try t.expectStrEq("Bright Acoustic Piano", pc_event.getInstrumentName());
 }
 
 test "Track parsing - error conditions" {
@@ -3012,7 +3018,7 @@ test "Track parsing - error conditions" {
             0x3C, 0x64, // Data bytes without status
         };
         const result = parseTrackEvents(allocator, &track_data);
-        try std.testing.expectError(error_mod.MidiError.MissingRunningStatus, result);
+        try t.expectErr(error_mod.MidiError.MissingRunningStatus, result);
     }
 
     // Truncated note event
@@ -3022,7 +3028,7 @@ test "Track parsing - error conditions" {
             0x90, 0x3C, // Note On with missing velocity byte
         };
         const result = parseTrackEvents(allocator, &track_data);
-        try std.testing.expectError(error_mod.MidiError.UnexpectedEndOfFile, result);
+        try t.expectErr(error_mod.MidiError.UnexpectedEndOfFile, result);
     }
 
     // Invalid note number
@@ -3032,7 +3038,7 @@ test "Track parsing - error conditions" {
             0x90, 0x80, 0x64, // Note On with invalid note (128 > 127)
         };
         const result = parseTrackEvents(allocator, &track_data);
-        try std.testing.expectError(error_mod.MidiError.InvalidEventData, result);
+        try t.expectErr(error_mod.MidiError.InvalidEventData, result);
     }
 }
 
@@ -3057,27 +3063,27 @@ test "Complete track parsing from MTrk chunk" {
     var result = try parseTrack(allocator, &mtrk_chunk);
     defer result.deinit(allocator);
 
-    try std.testing.expectEqual(@as(usize, 2), result.note_events.items.len);
-    try std.testing.expectEqual(@as(u32, 12), result.track_length);
+    try t.expectEq(2, result.note_events.items.len);
+    try t.expectEq(12, result.track_length);
 }
 
 test "MidiEventType classification" {
-    try std.testing.expectEqual(MidiEventType.note_off, MidiEventType.fromStatus(0x80));
-    try std.testing.expectEqual(MidiEventType.note_off, MidiEventType.fromStatus(0x8F));
-    try std.testing.expectEqual(MidiEventType.note_on, MidiEventType.fromStatus(0x90));
-    try std.testing.expectEqual(MidiEventType.note_on, MidiEventType.fromStatus(0x9F));
-    try std.testing.expectEqual(MidiEventType.polyphonic_pressure, MidiEventType.fromStatus(0xA0));
-    try std.testing.expectEqual(MidiEventType.polyphonic_pressure, MidiEventType.fromStatus(0xAF));
-    try std.testing.expectEqual(MidiEventType.control_change, MidiEventType.fromStatus(0xB0));
-    try std.testing.expectEqual(MidiEventType.control_change, MidiEventType.fromStatus(0xBF));
-    try std.testing.expectEqual(MidiEventType.program_change, MidiEventType.fromStatus(0xC0));
-    try std.testing.expectEqual(MidiEventType.program_change, MidiEventType.fromStatus(0xCF));
-    try std.testing.expectEqual(MidiEventType.channel_pressure, MidiEventType.fromStatus(0xD0));
-    try std.testing.expectEqual(MidiEventType.channel_pressure, MidiEventType.fromStatus(0xDF));
-    try std.testing.expectEqual(MidiEventType.pitch_bend, MidiEventType.fromStatus(0xE0));
-    try std.testing.expectEqual(MidiEventType.pitch_bend, MidiEventType.fromStatus(0xEF));
-    try std.testing.expectEqual(MidiEventType.other, MidiEventType.fromStatus(0xF0));
-    try std.testing.expectEqual(MidiEventType.other, MidiEventType.fromStatus(0xFF));
+    try t.expectEq(MidiEventType.note_off, MidiEventType.fromStatus(0x80));
+    try t.expectEq(MidiEventType.note_off, MidiEventType.fromStatus(0x8F));
+    try t.expectEq(MidiEventType.note_on, MidiEventType.fromStatus(0x90));
+    try t.expectEq(MidiEventType.note_on, MidiEventType.fromStatus(0x9F));
+    try t.expectEq(MidiEventType.polyphonic_pressure, MidiEventType.fromStatus(0xA0));
+    try t.expectEq(MidiEventType.polyphonic_pressure, MidiEventType.fromStatus(0xAF));
+    try t.expectEq(MidiEventType.control_change, MidiEventType.fromStatus(0xB0));
+    try t.expectEq(MidiEventType.control_change, MidiEventType.fromStatus(0xBF));
+    try t.expectEq(MidiEventType.program_change, MidiEventType.fromStatus(0xC0));
+    try t.expectEq(MidiEventType.program_change, MidiEventType.fromStatus(0xCF));
+    try t.expectEq(MidiEventType.channel_pressure, MidiEventType.fromStatus(0xD0));
+    try t.expectEq(MidiEventType.channel_pressure, MidiEventType.fromStatus(0xDF));
+    try t.expectEq(MidiEventType.pitch_bend, MidiEventType.fromStatus(0xE0));
+    try t.expectEq(MidiEventType.pitch_bend, MidiEventType.fromStatus(0xEF));
+    try t.expectEq(MidiEventType.other, MidiEventType.fromStatus(0xF0));
+    try t.expectEq(MidiEventType.other, MidiEventType.fromStatus(0xFF));
 }
 
 test "Track parsing performance benchmark - target 10MB/s" {
@@ -3086,7 +3092,7 @@ test "Track parsing performance benchmark - target 10MB/s" {
     const allocator = gpa.allocator();
 
     // Create a larger track for performance testing
-    var track_data = std.ArrayList(u8).init(allocator);
+    var track_data = containers.List(u8).init(allocator);
     defer track_data.deinit();
 
     // Generate 1000 note on/off pairs (6000 bytes total)
@@ -3121,11 +3127,11 @@ test "Track parsing performance benchmark - target 10MB/s" {
     const bytes_per_second = (@as(f64, @floatFromInt(total_bytes)) * 1_000_000_000.0) / @as(f64, @floatFromInt(total_ns));
     const mb_per_second = bytes_per_second / (1024.0 * 1024.0);
 
-    std.debug.print("Track parsing performance: {d:.2} MB/s\n", .{mb_per_second});
+    log.perf("Track parsing", mb_per_second, "MB/s");
 
     // Target is 10MB/s minimum
     // This should easily achieve the target with optimized parsing
-    try std.testing.expect(mb_per_second > 5.0); // Relaxed for CI environments
+    try t.expect(mb_per_second > 5.0); // Relaxed for CI environments
 }
 
 test "Parser initialization" {
@@ -3137,7 +3143,7 @@ test "Parser initialization" {
     defer parser.deinit();
 
     // Simply verify the parser was created successfully
-    try std.testing.expect(true);
+    try t.expect(true);
 }
 
 // Tempo Parsing Tests - Implements TASK-011/019 per MIDI_Architecture_Reference.md Section 2.6
@@ -3163,13 +3169,13 @@ test "Tempo event parsing - basic tempo change" {
     var result = try parseTrackEvents(allocator, &track_data);
     defer result.deinit(allocator);
 
-    try std.testing.expectEqual(@as(usize, 1), result.tempo_events.items.len);
-    try std.testing.expectEqual(@as(usize, 2), result.note_events.items.len);
+    try t.expectEq(1, result.tempo_events.items.len);
+    try t.expectEq(2, result.note_events.items.len);
 
     // Check tempo event
     const tempo = result.tempo_events.items[0];
-    try std.testing.expectEqual(@as(u32, 0), tempo.tick);
-    try std.testing.expectEqual(@as(u32, 500_000), tempo.microseconds_per_quarter);
+    try t.expectEq(0, tempo.tick);
+    try t.expectEq(500_000, tempo.microseconds_per_quarter);
     try std.testing.expectApproxEqAbs(@as(f64, 120.0), tempo.toBPM(), 0.001);
 }
 
@@ -3200,22 +3206,22 @@ test "Tempo event parsing - multiple tempo changes" {
     var result = try parseTrackEvents(allocator, &track_data);
     defer result.deinit(allocator);
 
-    try std.testing.expectEqual(@as(usize, 3), result.tempo_events.items.len);
+    try t.expectEq(3, result.tempo_events.items.len);
 
     // Check all tempo events
     const tempo1 = result.tempo_events.items[0];
-    try std.testing.expectEqual(@as(u32, 0), tempo1.tick);
-    try std.testing.expectEqual(@as(u32, 500_000), tempo1.microseconds_per_quarter);
+    try t.expectEq(0, tempo1.tick);
+    try t.expectEq(500_000, tempo1.microseconds_per_quarter);
     try std.testing.expectApproxEqAbs(@as(f64, 120.0), tempo1.toBPM(), 0.001);
 
     const tempo2 = result.tempo_events.items[1];
-    try std.testing.expectEqual(@as(u32, 96), tempo2.tick);
-    try std.testing.expectEqual(@as(u32, 400_000), tempo2.microseconds_per_quarter);
+    try t.expectEq(96, tempo2.tick);
+    try t.expectEq(400_000, tempo2.microseconds_per_quarter);
     try std.testing.expectApproxEqAbs(@as(f64, 150.0), tempo2.toBPM(), 0.001);
 
     const tempo3 = result.tempo_events.items[2];
-    try std.testing.expectEqual(@as(u32, 192), tempo3.tick);
-    try std.testing.expectEqual(@as(u32, 600_000), tempo3.microseconds_per_quarter);
+    try t.expectEq(192, tempo3.tick);
+    try t.expectEq(600_000, tempo3.microseconds_per_quarter);
     try std.testing.expectApproxEqAbs(@as(f64, 100.0), tempo3.toBPM(), 0.001);
 }
 
@@ -3244,8 +3250,8 @@ test "Tempo event - BPM conversions" {
     // Test fromBPM creation
     {
         const tempo = TempoEvent.fromBPM(96, 120.0);
-        try std.testing.expectEqual(@as(u32, 96), tempo.tick);
-        try std.testing.expectEqual(@as(u32, 500_000), tempo.microseconds_per_quarter);
+        try t.expectEq(96, tempo.tick);
+        try t.expectEq(500_000, tempo.microseconds_per_quarter);
     }
 
     // Test round-trip conversion
@@ -3278,15 +3284,15 @@ test "Tempo event parsing - edge cases" {
         var result = try parseTrackEvents(allocator, &track_data);
         defer result.deinit(allocator);
 
-        try std.testing.expectEqual(@as(usize, 2), result.tempo_events.items.len);
+        try t.expectEq(2, result.tempo_events.items.len);
 
         const slow_tempo = result.tempo_events.items[0];
-        try std.testing.expectEqual(@as(u32, 16_777_215), slow_tempo.microseconds_per_quarter);
+        try t.expectEq(16_777_215, slow_tempo.microseconds_per_quarter);
         try std.testing.expectApproxEqAbs(@as(f64, 3.576), slow_tempo.toBPM(), 0.001);
 
         const fast_tempo = result.tempo_events.items[1];
-        try std.testing.expectEqual(@as(u32, 1), fast_tempo.microseconds_per_quarter);
-        try std.testing.expectEqual(@as(f64, 60_000_000.0), fast_tempo.toBPM());
+        try t.expectEq(1, fast_tempo.microseconds_per_quarter);
+        try t.expectEq(60_000_000.0, fast_tempo.toBPM());
     }
 }
 
@@ -3320,17 +3326,17 @@ test "Tempo parsing - mixed with other meta events" {
     defer result.deinit(allocator);
 
     // Should have extracted only the tempo event
-    try std.testing.expectEqual(@as(usize, 1), result.tempo_events.items.len);
-    try std.testing.expectEqual(@as(usize, 2), result.note_events.items.len);
+    try t.expectEq(1, result.tempo_events.items.len);
+    try t.expectEq(2, result.note_events.items.len);
 
     const tempo = result.tempo_events.items[0];
-    try std.testing.expectEqual(@as(u32, 0), tempo.tick);
-    try std.testing.expectEqual(@as(u32, 500_000), tempo.microseconds_per_quarter);
+    try t.expectEq(0, tempo.tick);
+    try t.expectEq(500_000, tempo.microseconds_per_quarter);
 }
 
 test "Default tempo constant" {
     // Verify default tempo is 120 BPM (500,000 microseconds)
-    try std.testing.expectEqual(@as(u32, 500_000), DEFAULT_TEMPO_MICROSECONDS);
+    try t.expectEq(500_000, DEFAULT_TEMPO_MICROSECONDS);
 
     // Create a tempo event with default value
     const default_tempo = TempoEvent{
@@ -3350,8 +3356,8 @@ test "TempoMap - basic initialization and cleanup" {
     var tempo_map = TempoMap.init(allocator, 96);
     defer tempo_map.deinit();
 
-    try std.testing.expectEqual(@as(u16, 96), tempo_map.division);
-    try std.testing.expectEqual(@as(usize, 0), tempo_map.tempo_events.items.len);
+    try t.expectEq(96, tempo_map.division);
+    try t.expectEq(0, tempo_map.tempo_events.items.len);
 }
 
 test "TempoMap - build from empty events (default tempo)" {
@@ -3366,9 +3372,9 @@ test "TempoMap - build from empty events (default tempo)" {
     try tempo_map.buildFromEvents(&events);
 
     // Should have default tempo at tick 0
-    try std.testing.expectEqual(@as(usize, 1), tempo_map.tempo_events.items.len);
-    try std.testing.expectEqual(@as(u32, 0), tempo_map.tempo_events.items[0].tick);
-    try std.testing.expectEqual(DEFAULT_TEMPO_MICROSECONDS, tempo_map.tempo_events.items[0].microseconds_per_quarter);
+    try t.expectEq(1, tempo_map.tempo_events.items.len);
+    try t.expectEq(0, tempo_map.tempo_events.items[0].tick);
+    try t.expectEq(DEFAULT_TEMPO_MICROSECONDS, tempo_map.tempo_events.items[0].microseconds_per_quarter);
 }
 
 test "TempoMap - build from single tempo event" {
@@ -3385,11 +3391,11 @@ test "TempoMap - build from single tempo event" {
     try tempo_map.buildFromEvents(&events);
 
     // Should have default tempo at tick 0 and our event at tick 192
-    try std.testing.expectEqual(@as(usize, 2), tempo_map.tempo_events.items.len);
-    try std.testing.expectEqual(@as(u32, 0), tempo_map.tempo_events.items[0].tick);
-    try std.testing.expectEqual(DEFAULT_TEMPO_MICROSECONDS, tempo_map.tempo_events.items[0].microseconds_per_quarter);
-    try std.testing.expectEqual(@as(u32, 192), tempo_map.tempo_events.items[1].tick);
-    try std.testing.expectEqual(@as(u32, 400_000), tempo_map.tempo_events.items[1].microseconds_per_quarter);
+    try t.expectEq(2, tempo_map.tempo_events.items.len);
+    try t.expectEq(0, tempo_map.tempo_events.items[0].tick);
+    try t.expectEq(DEFAULT_TEMPO_MICROSECONDS, tempo_map.tempo_events.items[0].microseconds_per_quarter);
+    try t.expectEq(192, tempo_map.tempo_events.items[1].tick);
+    try t.expectEq(400_000, tempo_map.tempo_events.items[1].microseconds_per_quarter);
 }
 
 test "TempoMap - build from multiple unsorted tempo events" {
@@ -3409,11 +3415,11 @@ test "TempoMap - build from multiple unsorted tempo events" {
     try tempo_map.buildFromEvents(&events);
 
     // Should be sorted by tick after building
-    try std.testing.expectEqual(@as(usize, 4), tempo_map.tempo_events.items.len);
-    try std.testing.expectEqual(@as(u32, 0), tempo_map.tempo_events.items[0].tick); // Default
-    try std.testing.expectEqual(@as(u32, 96), tempo_map.tempo_events.items[1].tick);
-    try std.testing.expectEqual(@as(u32, 192), tempo_map.tempo_events.items[2].tick);
-    try std.testing.expectEqual(@as(u32, 384), tempo_map.tempo_events.items[3].tick);
+    try t.expectEq(4, tempo_map.tempo_events.items.len);
+    try t.expectEq(0, tempo_map.tempo_events.items[0].tick); // Default
+    try t.expectEq(96, tempo_map.tempo_events.items[1].tick);
+    try t.expectEq(192, tempo_map.tempo_events.items[2].tick);
+    try t.expectEq(384, tempo_map.tempo_events.items[3].tick);
 }
 
 test "TempoMap - absolute time calculation with single tempo" {
@@ -3431,16 +3437,16 @@ test "TempoMap - absolute time calculation with single tempo" {
     try tempo_map.buildFromEvents(&events);
 
     // Test various tick positions
-    try std.testing.expectEqual(@as(u64, 0), tempo_map.getAbsoluteTimeMicroseconds(0));
+    try t.expectEq(0, tempo_map.getAbsoluteTimeMicroseconds(0));
 
     // 96 ticks = 1 quarter note = 500,000 μs
-    try std.testing.expectEqual(@as(u64, 500_000), tempo_map.getAbsoluteTimeMicroseconds(96));
+    try t.expectEq(500_000, tempo_map.getAbsoluteTimeMicroseconds(96));
 
     // 192 ticks = 2 quarter notes = 1,000,000 μs
-    try std.testing.expectEqual(@as(u64, 1_000_000), tempo_map.getAbsoluteTimeMicroseconds(192));
+    try t.expectEq(1_000_000, tempo_map.getAbsoluteTimeMicroseconds(192));
 
     // 48 ticks = 0.5 quarter note = 250,000 μs
-    try std.testing.expectEqual(@as(u64, 250_000), tempo_map.getAbsoluteTimeMicroseconds(48));
+    try t.expectEq(250_000, tempo_map.getAbsoluteTimeMicroseconds(48));
 }
 
 test "TempoMap - absolute time calculation with multiple tempo changes" {
@@ -3459,16 +3465,16 @@ test "TempoMap - absolute time calculation with multiple tempo changes" {
     try tempo_map.buildFromEvents(&events);
 
     // Test time calculation at tempo change boundaries
-    try std.testing.expectEqual(@as(u64, 0), tempo_map.getAbsoluteTimeMicroseconds(0));
+    try t.expectEq(0, tempo_map.getAbsoluteTimeMicroseconds(0));
 
     // At tick 96: should be 500,000 μs (1 quarter at 120 BPM)
-    try std.testing.expectEqual(@as(u64, 500_000), tempo_map.getAbsoluteTimeMicroseconds(96));
+    try t.expectEq(500_000, tempo_map.getAbsoluteTimeMicroseconds(96));
 
     // At tick 192: 500,000 + 400,000 = 900,000 μs
-    try std.testing.expectEqual(@as(u64, 900_000), tempo_map.getAbsoluteTimeMicroseconds(192));
+    try t.expectEq(900_000, tempo_map.getAbsoluteTimeMicroseconds(192));
 
     // At tick 288: 500,000 + 400,000 + 600,000 = 1,500,000 μs
-    try std.testing.expectEqual(@as(u64, 1_500_000), tempo_map.getAbsoluteTimeMicroseconds(288));
+    try t.expectEq(1_500_000, tempo_map.getAbsoluteTimeMicroseconds(288));
 }
 
 test "TempoMap - getTempoAtTick binary search" {
@@ -3488,15 +3494,15 @@ test "TempoMap - getTempoAtTick binary search" {
     try tempo_map.buildFromEvents(&events);
 
     // Test tempo lookup at various positions
-    try std.testing.expectEqual(@as(u32, 500_000), tempo_map.getTempoAtTick(0));
-    try std.testing.expectEqual(@as(u32, 500_000), tempo_map.getTempoAtTick(50));
-    try std.testing.expectEqual(@as(u32, 500_000), tempo_map.getTempoAtTick(95));
-    try std.testing.expectEqual(@as(u32, 400_000), tempo_map.getTempoAtTick(96));
-    try std.testing.expectEqual(@as(u32, 400_000), tempo_map.getTempoAtTick(150));
-    try std.testing.expectEqual(@as(u32, 600_000), tempo_map.getTempoAtTick(192));
-    try std.testing.expectEqual(@as(u32, 600_000), tempo_map.getTempoAtTick(300));
-    try std.testing.expectEqual(@as(u32, 300_000), tempo_map.getTempoAtTick(384));
-    try std.testing.expectEqual(@as(u32, 300_000), tempo_map.getTempoAtTick(500));
+    try t.expectEq(500_000, tempo_map.getTempoAtTick(0));
+    try t.expectEq(500_000, tempo_map.getTempoAtTick(50));
+    try t.expectEq(500_000, tempo_map.getTempoAtTick(95));
+    try t.expectEq(400_000, tempo_map.getTempoAtTick(96));
+    try t.expectEq(400_000, tempo_map.getTempoAtTick(150));
+    try t.expectEq(600_000, tempo_map.getTempoAtTick(192));
+    try t.expectEq(600_000, tempo_map.getTempoAtTick(300));
+    try t.expectEq(300_000, tempo_map.getTempoAtTick(384));
+    try t.expectEq(300_000, tempo_map.getTempoAtTick(500));
 }
 
 test "TempoMap - note duration calculation with tempo changes during note" {
@@ -3518,7 +3524,7 @@ test "TempoMap - note duration calculation with tempo changes during note" {
     // Second half (48-96): 48 ticks at 400,000 μs/quarter = 200,000 μs
     // Total: 450,000 μs
     const duration = tempo_map.getNoteDurationMicroseconds(0, 96);
-    try std.testing.expectEqual(@as(u64, 450_000), duration);
+    try t.expectEq(450_000, duration);
 
     // Test seconds conversion
     const duration_seconds = tempo_map.getNoteDurationSeconds(0, 96);
@@ -3556,8 +3562,8 @@ test "TempoMap - edge cases" {
     defer tempo_map.deinit();
 
     // Test with no tempo events (should use default)
-    try std.testing.expectEqual(DEFAULT_TEMPO_MICROSECONDS, tempo_map.getTempoAtTick(100));
-    try std.testing.expectEqual(@as(u64, 520_833), tempo_map.getAbsoluteTimeMicroseconds(100)); // ~100 ticks at 120 BPM
+    try t.expectEq(DEFAULT_TEMPO_MICROSECONDS, tempo_map.getTempoAtTick(100));
+    try t.expectEq(520_833, tempo_map.getAbsoluteTimeMicroseconds(100)); // ~100 ticks at 120 BPM
 
     // Test zero-duration note
     const events = [_]TempoEvent{
@@ -3565,8 +3571,8 @@ test "TempoMap - edge cases" {
     };
     try tempo_map.buildFromEvents(&events);
 
-    try std.testing.expectEqual(@as(u64, 0), tempo_map.getNoteDurationMicroseconds(96, 96));
-    try std.testing.expectEqual(@as(u64, 0), tempo_map.getNoteDurationMicroseconds(96, 50)); // note_off < note_on
+    try t.expectEq(0, tempo_map.getNoteDurationMicroseconds(96, 96));
+    try t.expectEq(0, tempo_map.getNoteDurationMicroseconds(96, 50)); // note_off < note_on
 }
 
 test "TempoMap - performance verification for < 10μs target" {
@@ -3578,7 +3584,7 @@ test "TempoMap - performance verification for < 10μs target" {
     defer tempo_map.deinit();
 
     // Create many tempo events to test binary search performance
-    var events = std.ArrayList(TempoEvent).init(allocator);
+    var events = containers.List(TempoEvent).init(allocator);
     defer events.deinit();
 
     var i: u32 = 0;
@@ -3606,13 +3612,13 @@ test "TempoMap - performance verification for < 10μs target" {
 test "ticksToMicroseconds inline function" {
     // Test the core conversion function directly
     // 96 ticks at 500,000 μs/quarter with 96 division = 500,000 μs
-    try std.testing.expectEqual(@as(u64, 500_000), ticksToMicroseconds(96, 500_000, 96));
+    try t.expectEq(500_000, ticksToMicroseconds(96, 500_000, 96));
 
     // 48 ticks at 500,000 μs/quarter with 96 division = 250,000 μs
-    try std.testing.expectEqual(@as(u64, 250_000), ticksToMicroseconds(48, 500_000, 96));
+    try t.expectEq(250_000, ticksToMicroseconds(48, 500_000, 96));
 
     // Different division: 480 ticks at 500,000 μs/quarter with 480 division = 500,000 μs
-    try std.testing.expectEqual(@as(u64, 500_000), ticksToMicroseconds(480, 500_000, 480));
+    try t.expectEq(500_000, ticksToMicroseconds(480, 500_000, 480));
 }
 
 test "TASK-022 Integration - TempoMap with parsed tempo events" {
@@ -3643,7 +3649,7 @@ test "TASK-022 Integration - TempoMap with parsed tempo events" {
     }
 
     // Verify we got the tempo events
-    try std.testing.expectEqual(@as(usize, 3), result.tempo_events.items.len);
+    try t.expectEq(3, result.tempo_events.items.len);
 
     // Create tempo map from parsed events
     var tempo_map = TempoMap.init(allocator, 96);
@@ -3653,25 +3659,25 @@ test "TASK-022 Integration - TempoMap with parsed tempo events" {
 
     // Verify tempo map functionality
     // Should have 3 events total (since first event starts at tick 0, no default needed)
-    try std.testing.expectEqual(@as(usize, 3), tempo_map.tempo_events.items.len);
+    try t.expectEq(3, tempo_map.tempo_events.items.len);
 
     // Test absolute time calculations across tempo changes
-    try std.testing.expectEqual(@as(u64, 0), tempo_map.getAbsoluteTimeMicroseconds(0));
-    try std.testing.expectEqual(@as(u64, 500_000), tempo_map.getAbsoluteTimeMicroseconds(96)); // 1 quarter at 120 BPM
-    try std.testing.expectEqual(@as(u64, 900_000), tempo_map.getAbsoluteTimeMicroseconds(192)); // + 1 quarter at 150 BPM
-    try std.testing.expectEqual(@as(u64, 1_500_000), tempo_map.getAbsoluteTimeMicroseconds(288)); // + 1 quarter at 100 BPM
+    try t.expectEq(0, tempo_map.getAbsoluteTimeMicroseconds(0));
+    try t.expectEq(500_000, tempo_map.getAbsoluteTimeMicroseconds(96)); // 1 quarter at 120 BPM
+    try t.expectEq(900_000, tempo_map.getAbsoluteTimeMicroseconds(192)); // + 1 quarter at 150 BPM
+    try t.expectEq(1_500_000, tempo_map.getAbsoluteTimeMicroseconds(288)); // + 1 quarter at 100 BPM
 
     // Test note duration calculation spanning tempo change
     const note_duration = tempo_map.getNoteDurationMicroseconds(48, 144); // Spans tempo change at 96
     // 48 ticks at 120 BPM = 250,000 μs
     // 48 ticks at 150 BPM = 200,000 μs
     // Total = 450,000 μs
-    try std.testing.expectEqual(@as(u64, 450_000), note_duration);
+    try t.expectEq(450_000, note_duration);
 
     // Test tempo lookup
-    try std.testing.expectEqual(@as(u32, 500_000), tempo_map.getTempoAtTick(50)); // 120 BPM
-    try std.testing.expectEqual(@as(u32, 400_000), tempo_map.getTempoAtTick(150)); // 150 BPM
-    try std.testing.expectEqual(@as(u32, 600_000), tempo_map.getTempoAtTick(250)); // 100 BPM
+    try t.expectEq(500_000, tempo_map.getTempoAtTick(50)); // 120 BPM
+    try t.expectEq(400_000, tempo_map.getTempoAtTick(150)); // 150 BPM
+    try t.expectEq(600_000, tempo_map.getTempoAtTick(250)); // 100 BPM
 }
 
 // Time Signature Parsing Tests - Implements TASK-012/019 per MIDI_Architecture_Reference.md Section 2.6
@@ -3697,27 +3703,27 @@ test "Time signature event parsing - basic 4/4 time" {
     var result = try parseTrackEvents(allocator, &track_data);
     defer result.deinit(allocator);
 
-    try std.testing.expectEqual(@as(usize, 1), result.time_signature_events.items.len);
-    try std.testing.expectEqual(@as(usize, 2), result.note_events.items.len);
+    try t.expectEq(1, result.time_signature_events.items.len);
+    try t.expectEq(2, result.note_events.items.len);
 
     // Check time signature event
     const time_sig = result.time_signature_events.items[0];
-    try std.testing.expectEqual(@as(u32, 0), time_sig.tick);
-    try std.testing.expectEqual(@as(u8, 4), time_sig.numerator);
-    try std.testing.expectEqual(@as(u8, 2), time_sig.denominator_power);
-    try std.testing.expectEqual(@as(u8, 24), time_sig.clocks_per_metronome);
-    try std.testing.expectEqual(@as(u8, 8), time_sig.thirtysecond_notes_per_quarter);
+    try t.expectEq(0, time_sig.tick);
+    try t.expectEq(4, time_sig.numerator);
+    try t.expectEq(2, time_sig.denominator_power);
+    try t.expectEq(24, time_sig.clocks_per_metronome);
+    try t.expectEq(8, time_sig.thirtysecond_notes_per_quarter);
 
     // Check getDenominator function
-    try std.testing.expectEqual(@as(u8, 4), time_sig.getDenominator());
+    try t.expectEq(4, time_sig.getDenominator());
 
     // Check toString function
     var buffer: [16]u8 = undefined;
     const str = try time_sig.toString(&buffer);
-    try std.testing.expectEqualStrings("4/4", str);
+    try t.expectStrEq("4/4", str);
 
     // Check isCompound function
-    try std.testing.expect(!time_sig.isCompound());
+    try t.expectFalse(time_sig.isCompound());
 }
 
 test "Time signature event parsing - various time signatures" {
@@ -3759,17 +3765,17 @@ test "Time signature event parsing - various time signatures" {
         var result = try parseTrackEvents(allocator, &track_data);
         defer result.deinit(allocator);
 
-        try std.testing.expectEqual(@as(usize, 1), result.time_signature_events.items.len);
+        try t.expectEq(1, result.time_signature_events.items.len);
 
         const time_sig = result.time_signature_events.items[0];
-        try std.testing.expectEqual(test_case.expected_numerator, time_sig.numerator);
-        try std.testing.expectEqual(test_case.expected_denominator, time_sig.getDenominator());
+        try t.expectEq(test_case.expected_numerator, time_sig.numerator);
+        try t.expectEq(test_case.expected_denominator, time_sig.getDenominator());
 
         var buffer: [16]u8 = undefined;
         const str = try time_sig.toString(&buffer);
-        try std.testing.expectEqualStrings(test_case.expected_string, str);
+        try t.expectStrEq(test_case.expected_string, str);
 
-        try std.testing.expectEqual(test_case.is_compound, time_sig.isCompound());
+        try t.expectEq(test_case.is_compound, time_sig.isCompound());
     }
 }
 
@@ -3800,24 +3806,24 @@ test "Time signature event parsing - multiple time signature changes" {
     var result = try parseTrackEvents(allocator, &track_data);
     defer result.deinit(allocator);
 
-    try std.testing.expectEqual(@as(usize, 3), result.time_signature_events.items.len);
+    try t.expectEq(3, result.time_signature_events.items.len);
 
     // Check all time signature events
     const time_sig1 = result.time_signature_events.items[0];
-    try std.testing.expectEqual(@as(u32, 0), time_sig1.tick);
-    try std.testing.expectEqual(@as(u8, 4), time_sig1.numerator);
-    try std.testing.expectEqual(@as(u8, 4), time_sig1.getDenominator());
+    try t.expectEq(0, time_sig1.tick);
+    try t.expectEq(4, time_sig1.numerator);
+    try t.expectEq(4, time_sig1.getDenominator());
 
     const time_sig2 = result.time_signature_events.items[1];
-    try std.testing.expectEqual(@as(u32, 96), time_sig2.tick);
-    try std.testing.expectEqual(@as(u8, 3), time_sig2.numerator);
-    try std.testing.expectEqual(@as(u8, 4), time_sig2.getDenominator());
+    try t.expectEq(96, time_sig2.tick);
+    try t.expectEq(3, time_sig2.numerator);
+    try t.expectEq(4, time_sig2.getDenominator());
 
     const time_sig3 = result.time_signature_events.items[2];
-    try std.testing.expectEqual(@as(u32, 192), time_sig3.tick);
-    try std.testing.expectEqual(@as(u8, 6), time_sig3.numerator);
-    try std.testing.expectEqual(@as(u8, 8), time_sig3.getDenominator());
-    try std.testing.expect(time_sig3.isCompound());
+    try t.expectEq(192, time_sig3.tick);
+    try t.expectEq(6, time_sig3.numerator);
+    try t.expectEq(8, time_sig3.getDenominator());
+    try t.expect(time_sig3.isCompound());
 }
 
 test "Time signature parsing - mixed with tempo and other meta events" {
@@ -3853,21 +3859,21 @@ test "Time signature parsing - mixed with tempo and other meta events" {
     defer result.deinit(allocator);
 
     // Should have extracted tempo, time signature, and key signature events
-    try std.testing.expectEqual(@as(usize, 1), result.tempo_events.items.len);
-    try std.testing.expectEqual(@as(usize, 1), result.time_signature_events.items.len);
-    try std.testing.expectEqual(@as(usize, 1), result.key_signature_events.items.len);
-    try std.testing.expectEqual(@as(usize, 2), result.note_events.items.len);
+    try t.expectEq(1, result.tempo_events.items.len);
+    try t.expectEq(1, result.time_signature_events.items.len);
+    try t.expectEq(1, result.key_signature_events.items.len);
+    try t.expectEq(2, result.note_events.items.len);
 
     const time_sig = result.time_signature_events.items[0];
-    try std.testing.expectEqual(@as(u32, 0), time_sig.tick);
-    try std.testing.expectEqual(@as(u8, 4), time_sig.numerator);
-    try std.testing.expectEqual(@as(u8, 4), time_sig.getDenominator());
+    try t.expectEq(0, time_sig.tick);
+    try t.expectEq(4, time_sig.numerator);
+    try t.expectEq(4, time_sig.getDenominator());
 
     // Verify key signature (C major)
     const key_sig = result.key_signature_events.items[0];
-    try std.testing.expectEqual(@as(u32, 0), key_sig.tick);
-    try std.testing.expectEqual(@as(i8, 0), key_sig.sharps_flats);
-    try std.testing.expectEqual(true, key_sig.is_minor); // Note: The test data has 0x00, which means minor!
+    try t.expectEq(0, key_sig.tick);
+    try t.expectEq(0, key_sig.sharps_flats);
+    try t.expectEq(true, key_sig.is_minor); // Note: The test data has 0x00, which means minor!
 }
 
 test "Time signature event - denominator power edge cases" {
@@ -3894,7 +3900,7 @@ test "Time signature event - denominator power edge cases" {
             .thirtysecond_notes_per_quarter = 8,
         };
 
-        try std.testing.expectEqual(test_case.expected_denominator, time_sig.getDenominator());
+        try t.expectEq(test_case.expected_denominator, time_sig.getDenominator());
     }
 }
 
@@ -3925,7 +3931,7 @@ test "Time signature event - isCompound function" {
             .thirtysecond_notes_per_quarter = 8,
         };
 
-        try std.testing.expectEqual(test_case.is_compound, time_sig.isCompound());
+        try t.expectEq(test_case.is_compound, time_sig.isCompound());
     }
 }
 
@@ -3953,18 +3959,18 @@ test "Key signature event parsing - basic C major" {
     defer result.deinit(allocator);
 
     // Should have parsed key signature
-    try std.testing.expectEqual(@as(usize, 1), result.key_signature_events.items.len);
-    try std.testing.expectEqual(@as(usize, 2), result.note_events.items.len);
+    try t.expectEq(1, result.key_signature_events.items.len);
+    try t.expectEq(2, result.note_events.items.len);
 
     const key_sig = result.key_signature_events.items[0];
-    try std.testing.expectEqual(@as(u32, 0), key_sig.tick);
-    try std.testing.expectEqual(@as(i8, 0), key_sig.sharps_flats);
-    try std.testing.expectEqual(false, key_sig.is_minor);
-    try std.testing.expectEqualStrings("C", key_sig.getKeyName());
+    try t.expectEq(0, key_sig.tick);
+    try t.expectEq(0, key_sig.sharps_flats);
+    try t.expectEq(false, key_sig.is_minor);
+    try t.expectStrEq("C", key_sig.getKeyName());
 
     var buffer: [32]u8 = undefined;
     const key_string = try key_sig.toString(&buffer);
-    try std.testing.expectEqualStrings("C major", key_string);
+    try t.expectStrEq("C major", key_string);
 }
 
 test "Key signature event parsing - various keys" {
@@ -4033,21 +4039,21 @@ test "Key signature event parsing - various keys" {
         var result = try parseTrackEvents(allocator, &track_data);
         defer result.deinit(allocator);
 
-        try std.testing.expectEqual(@as(usize, 1), result.key_signature_events.items.len);
+        try t.expectEq(1, result.key_signature_events.items.len);
 
         const key_sig = result.key_signature_events.items[0];
-        try std.testing.expectEqual(test_case.sf, key_sig.sharps_flats);
-        try std.testing.expectEqual(test_case.mi == 0, key_sig.is_minor);
-        try std.testing.expectEqualStrings(test_case.expected_key, key_sig.getKeyName());
+        try t.expectEq(test_case.sf, key_sig.sharps_flats);
+        try t.expectEq(test_case.mi == 0, key_sig.is_minor);
+        try t.expectStrEq(test_case.expected_key, key_sig.getKeyName());
 
         var buffer: [32]u8 = undefined;
         const key_string = try key_sig.toString(&buffer);
-        try std.testing.expectEqualStrings(test_case.expected_string, key_string);
+        try t.expectStrEq(test_case.expected_string, key_string);
 
         // Test accidentals helper
         const accidentals = key_sig.getAccidentals();
-        try std.testing.expectEqual(test_case.accidentals.count, accidentals.count);
-        try std.testing.expectEqual(test_case.accidentals.is_flat, accidentals.is_flat);
+        try t.expectEq(test_case.accidentals.count, accidentals.count);
+        try t.expectEq(test_case.accidentals.is_flat, accidentals.is_flat);
     }
 }
 
@@ -4079,19 +4085,19 @@ test "Key signature event parsing - multiple key changes" {
     defer result.deinit(allocator);
 
     // Should have 3 key signature events
-    try std.testing.expectEqual(@as(usize, 3), result.key_signature_events.items.len);
+    try t.expectEq(3, result.key_signature_events.items.len);
 
     // Check first key signature (C major)
-    try std.testing.expectEqual(@as(u32, 0), result.key_signature_events.items[0].tick);
-    try std.testing.expectEqualStrings("C", result.key_signature_events.items[0].getKeyName());
+    try t.expectEq(0, result.key_signature_events.items[0].tick);
+    try t.expectStrEq("C", result.key_signature_events.items[0].getKeyName());
 
     // Check second key signature (G major)
-    try std.testing.expectEqual(@as(u32, 96), result.key_signature_events.items[1].tick);
-    try std.testing.expectEqualStrings("G", result.key_signature_events.items[1].getKeyName());
+    try t.expectEq(96, result.key_signature_events.items[1].tick);
+    try t.expectStrEq("G", result.key_signature_events.items[1].getKeyName());
 
     // Check third key signature (F major)
-    try std.testing.expectEqual(@as(u32, 192), result.key_signature_events.items[2].tick);
-    try std.testing.expectEqualStrings("F", result.key_signature_events.items[2].getKeyName());
+    try t.expectEq(192, result.key_signature_events.items[2].tick);
+    try t.expectStrEq("F", result.key_signature_events.items[2].getKeyName());
 }
 
 test "Key signature parsing - invalid data handling" {
@@ -4110,7 +4116,7 @@ test "Key signature parsing - invalid data handling" {
         };
 
         const result = parseTrackEvents(allocator, &track_data);
-        try std.testing.expectError(error_mod.MidiError.InvalidEventData, result);
+        try t.expectErr(error_mod.MidiError.InvalidEventData, result);
     }
 
     // Test invalid sharps/flats value (< -7)
@@ -4124,7 +4130,7 @@ test "Key signature parsing - invalid data handling" {
         };
 
         const result = parseTrackEvents(allocator, &track_data);
-        try std.testing.expectError(error_mod.MidiError.InvalidEventData, result);
+        try t.expectErr(error_mod.MidiError.InvalidEventData, result);
     }
 
     // Test invalid major/minor value (> 1)
@@ -4138,7 +4144,7 @@ test "Key signature parsing - invalid data handling" {
         };
 
         const result = parseTrackEvents(allocator, &track_data);
-        try std.testing.expectError(error_mod.MidiError.InvalidEventData, result);
+        try t.expectErr(error_mod.MidiError.InvalidEventData, result);
     }
 }
 
@@ -4152,7 +4158,7 @@ test "Key signature parsing - edge case boundary values" {
         };
 
         // Should return "Unknown" for out-of-bounds values
-        try std.testing.expectEqualStrings("Unknown", key_sig.getKeyName());
+        try t.expectStrEq("Unknown", key_sig.getKeyName());
     }
 
     {
@@ -4162,7 +4168,7 @@ test "Key signature parsing - edge case boundary values" {
             .is_minor = true,
         };
 
-        try std.testing.expectEqualStrings("Unknown", key_sig.getKeyName());
+        try t.expectStrEq("Unknown", key_sig.getKeyName());
     }
 }
 
@@ -4194,20 +4200,20 @@ test "Key signature parsing - mixed with all meta events" {
     defer result.deinit(allocator);
 
     // Verify all meta events were parsed
-    try std.testing.expectEqual(@as(usize, 1), result.tempo_events.items.len);
-    try std.testing.expectEqual(@as(usize, 1), result.time_signature_events.items.len);
-    try std.testing.expectEqual(@as(usize, 1), result.key_signature_events.items.len);
-    try std.testing.expectEqual(@as(usize, 2), result.note_events.items.len);
+    try t.expectEq(1, result.tempo_events.items.len);
+    try t.expectEq(1, result.time_signature_events.items.len);
+    try t.expectEq(1, result.key_signature_events.items.len);
+    try t.expectEq(2, result.note_events.items.len);
 
     // Verify key signature
     const key_sig = result.key_signature_events.items[0];
-    try std.testing.expectEqual(@as(i8, -2), key_sig.sharps_flats);
-    try std.testing.expectEqual(true, key_sig.is_minor);
-    try std.testing.expectEqualStrings("G", key_sig.getKeyName());
+    try t.expectEq(-2, key_sig.sharps_flats);
+    try t.expectEq(true, key_sig.is_minor);
+    try t.expectStrEq("G", key_sig.getKeyName());
 
     var buffer: [32]u8 = undefined;
     const key_string = try key_sig.toString(&buffer);
-    try std.testing.expectEqualStrings("G minor", key_string);
+    try t.expectStrEq("G minor", key_string);
 }
 
 // Control Change Parsing Tests - Implements TASK-014 per MIDI_Architecture_Reference.md Section 2.2.4
@@ -4233,25 +4239,25 @@ test "Control change event parsing - sustain pedal" {
     var result = try parseTrackEvents(allocator, &track_data);
     defer result.deinit(allocator);
 
-    try std.testing.expectEqual(@as(usize, 2), result.control_change_events.items.len);
+    try t.expectEq(2, result.control_change_events.items.len);
 
     // Check first sustain pedal event (on)
     const sustain_on = result.control_change_events.items[0];
-    try std.testing.expectEqual(@as(u32, 0), sustain_on.tick);
-    try std.testing.expectEqual(@as(u4, 0), sustain_on.channel);
-    try std.testing.expectEqual(@as(u7, 64), sustain_on.controller);
-    try std.testing.expectEqual(@as(u7, 127), sustain_on.value);
-    try std.testing.expect(sustain_on.isSustainOn());
-    try std.testing.expect(!sustain_on.isSustainOff());
-    try std.testing.expectEqualStrings("Sustain Pedal", sustain_on.getControllerName());
+    try t.expectEq(0, sustain_on.tick);
+    try t.expectEq(0, sustain_on.channel);
+    try t.expectEq(64, sustain_on.controller);
+    try t.expectEq(127, sustain_on.value);
+    try t.expect(sustain_on.isSustainOn());
+    try t.expectFalse(sustain_on.isSustainOff());
+    try t.expectStrEq("Sustain Pedal", sustain_on.getControllerName());
 
     // Check second sustain pedal event (off)
     const sustain_off = result.control_change_events.items[1];
-    try std.testing.expectEqual(@as(u32, 96), sustain_off.tick);
-    try std.testing.expectEqual(@as(u7, 64), sustain_off.controller);
-    try std.testing.expectEqual(@as(u7, 0), sustain_off.value);
-    try std.testing.expect(!sustain_off.isSustainOn());
-    try std.testing.expect(sustain_off.isSustainOff());
+    try t.expectEq(96, sustain_off.tick);
+    try t.expectEq(64, sustain_off.controller);
+    try t.expectEq(0, sustain_off.value);
+    try t.expectFalse(sustain_off.isSustainOn());
+    try t.expect(sustain_off.isSustainOff());
 }
 
 test "Control change event parsing - volume and expression" {
@@ -4274,32 +4280,32 @@ test "Control change event parsing - volume and expression" {
     var result = try parseTrackEvents(allocator, &track_data);
     defer result.deinit(allocator);
 
-    try std.testing.expectEqual(@as(usize, 3), result.control_change_events.items.len);
+    try t.expectEq(3, result.control_change_events.items.len);
 
     // Check volume event on channel 1
     const volume1 = result.control_change_events.items[0];
-    try std.testing.expectEqual(@as(u32, 0), volume1.tick);
-    try std.testing.expectEqual(@as(u4, 1), volume1.channel);
-    try std.testing.expectEqual(@as(u7, 7), volume1.controller);
-    try std.testing.expectEqual(@as(u7, 100), volume1.value);
-    try std.testing.expectEqualStrings("Volume", volume1.getControllerName());
-    try std.testing.expectEqual(ControlChangeEvent.ControllerType.channel_volume, volume1.getControllerType().?);
+    try t.expectEq(0, volume1.tick);
+    try t.expectEq(1, volume1.channel);
+    try t.expectEq(7, volume1.controller);
+    try t.expectEq(100, volume1.value);
+    try t.expectStrEq("Volume", volume1.getControllerName());
+    try t.expectEq(ControlChangeEvent.ControllerType.channel_volume, volume1.getControllerType().?);
 
     // Check expression event on channel 1
     const expression = result.control_change_events.items[1];
-    try std.testing.expectEqual(@as(u32, 48), expression.tick);
-    try std.testing.expectEqual(@as(u4, 1), expression.channel);
-    try std.testing.expectEqual(@as(u7, 11), expression.controller);
-    try std.testing.expectEqual(@as(u7, 127), expression.value);
-    try std.testing.expectEqualStrings("Expression", expression.getControllerName());
-    try std.testing.expectEqual(ControlChangeEvent.ControllerType.expression, expression.getControllerType().?);
+    try t.expectEq(48, expression.tick);
+    try t.expectEq(1, expression.channel);
+    try t.expectEq(11, expression.controller);
+    try t.expectEq(127, expression.value);
+    try t.expectStrEq("Expression", expression.getControllerName());
+    try t.expectEq(ControlChangeEvent.ControllerType.expression, expression.getControllerType().?);
 
     // Check volume event on channel 2
     const volume2 = result.control_change_events.items[2];
-    try std.testing.expectEqual(@as(u32, 96), volume2.tick);
-    try std.testing.expectEqual(@as(u4, 2), volume2.channel);
-    try std.testing.expectEqual(@as(u7, 7), volume2.controller);
-    try std.testing.expectEqual(@as(u7, 80), volume2.value);
+    try t.expectEq(96, volume2.tick);
+    try t.expectEq(2, volume2.channel);
+    try t.expectEq(7, volume2.controller);
+    try t.expectEq(80, volume2.value);
 }
 
 test "Control change event parsing - all controllers tracked (TASK-016)" {
@@ -4329,17 +4335,17 @@ test "Control change event parsing - all controllers tracked (TASK-016)" {
     defer result.deinit(allocator);
 
     // TASK-016: Should track all control changes (6 controllers)
-    try std.testing.expectEqual(@as(usize, 6), result.control_change_events.items.len);
-    try std.testing.expectEqual(@as(u32, 6), result.events_parsed); // All 6 CCs tracked
-    try std.testing.expectEqual(@as(u32, 1), result.events_skipped); // Only End of Track
+    try t.expectEq(6, result.control_change_events.items.len);
+    try t.expectEq(6, result.events_parsed); // All 6 CCs tracked
+    try t.expectEq(1, result.events_skipped); // Only End of Track
 
     // Verify we got all controllers in order
-    try std.testing.expectEqual(@as(u7, 1), result.control_change_events.items[0].controller); // Modulation
-    try std.testing.expectEqual(@as(u7, 7), result.control_change_events.items[1].controller); // Volume
-    try std.testing.expectEqual(@as(u7, 10), result.control_change_events.items[2].controller); // Pan
-    try std.testing.expectEqual(@as(u7, 11), result.control_change_events.items[3].controller); // Expression
-    try std.testing.expectEqual(@as(u7, 64), result.control_change_events.items[4].controller); // Sustain
-    try std.testing.expectEqual(@as(u7, 91), result.control_change_events.items[5].controller); // Reverb
+    try t.expectEq(1, result.control_change_events.items[0].controller); // Modulation
+    try t.expectEq(7, result.control_change_events.items[1].controller); // Volume
+    try t.expectEq(10, result.control_change_events.items[2].controller); // Pan
+    try t.expectEq(11, result.control_change_events.items[3].controller); // Expression
+    try t.expectEq(64, result.control_change_events.items[4].controller); // Sustain
+    try t.expectEq(91, result.control_change_events.items[5].controller); // Reverb
 }
 
 test "Control change event parsing - running status" {
@@ -4364,26 +4370,26 @@ test "Control change event parsing - running status" {
     var result = try parseTrackEvents(allocator, &track_data);
     defer result.deinit(allocator);
 
-    try std.testing.expectEqual(@as(usize, 4), result.control_change_events.items.len);
+    try t.expectEq(4, result.control_change_events.items.len);
 
     // Verify all events have correct channel from running status
     for (result.control_change_events.items) |event| {
-        try std.testing.expectEqual(@as(u4, 0), event.channel);
+        try t.expectEq(0, event.channel);
     }
 
     // Verify tick positions
-    try std.testing.expectEqual(@as(u32, 0), result.control_change_events.items[0].tick);
-    try std.testing.expectEqual(@as(u32, 16), result.control_change_events.items[1].tick);
-    try std.testing.expectEqual(@as(u32, 32), result.control_change_events.items[2].tick);
-    try std.testing.expectEqual(@as(u32, 48), result.control_change_events.items[3].tick);
+    try t.expectEq(0, result.control_change_events.items[0].tick);
+    try t.expectEq(16, result.control_change_events.items[1].tick);
+    try t.expectEq(32, result.control_change_events.items[2].tick);
+    try t.expectEq(48, result.control_change_events.items[3].tick);
 
     // Verify controllers and values
-    try std.testing.expectEqual(@as(u7, 7), result.control_change_events.items[0].controller);
-    try std.testing.expectEqual(@as(u7, 100), result.control_change_events.items[0].value);
-    try std.testing.expectEqual(@as(u7, 7), result.control_change_events.items[1].controller);
-    try std.testing.expectEqual(@as(u7, 96), result.control_change_events.items[1].value);
-    try std.testing.expectEqual(@as(u7, 11), result.control_change_events.items[3].controller);
-    try std.testing.expectEqual(@as(u7, 112), result.control_change_events.items[3].value);
+    try t.expectEq(7, result.control_change_events.items[0].controller);
+    try t.expectEq(100, result.control_change_events.items[0].value);
+    try t.expectEq(7, result.control_change_events.items[1].controller);
+    try t.expectEq(96, result.control_change_events.items[1].value);
+    try t.expectEq(11, result.control_change_events.items[3].controller);
+    try t.expectEq(112, result.control_change_events.items[3].value);
 }
 
 test "Control change event parsing - mixed with all event types" {
@@ -4420,18 +4426,18 @@ test "Control change event parsing - mixed with all event types" {
     defer result.deinit(allocator);
 
     // Verify all event types were parsed
-    try std.testing.expectEqual(@as(usize, 1), result.tempo_events.items.len);
-    try std.testing.expectEqual(@as(usize, 1), result.time_signature_events.items.len);
-    try std.testing.expectEqual(@as(usize, 1), result.key_signature_events.items.len);
-    try std.testing.expectEqual(@as(usize, 3), result.control_change_events.items.len);
-    try std.testing.expectEqual(@as(usize, 2), result.note_events.items.len);
+    try t.expectEq(1, result.tempo_events.items.len);
+    try t.expectEq(1, result.time_signature_events.items.len);
+    try t.expectEq(1, result.key_signature_events.items.len);
+    try t.expectEq(3, result.control_change_events.items.len);
+    try t.expectEq(2, result.note_events.items.len);
 
     // Verify control changes
-    try std.testing.expectEqual(@as(u7, 7), result.control_change_events.items[0].controller); // Volume
-    try std.testing.expectEqual(@as(u7, 64), result.control_change_events.items[1].controller); // Sustain On
-    try std.testing.expectEqual(@as(u7, 64), result.control_change_events.items[2].controller); // Sustain Off
-    try std.testing.expectEqual(@as(u7, 127), result.control_change_events.items[1].value); // On value
-    try std.testing.expectEqual(@as(u7, 0), result.control_change_events.items[2].value); // Off value
+    try t.expectEq(7, result.control_change_events.items[0].controller); // Volume
+    try t.expectEq(64, result.control_change_events.items[1].controller); // Sustain On
+    try t.expectEq(64, result.control_change_events.items[2].controller); // Sustain Off
+    try t.expectEq(127, result.control_change_events.items[1].value); // On value
+    try t.expectEq(0, result.control_change_events.items[2].value); // Off value
 }
 
 test "Control change event - helper functions" {
@@ -4443,8 +4449,8 @@ test "Control change event - helper functions" {
             .controller = 64,
             .value = 64, // Minimum "on" value
         };
-        try std.testing.expect(sustain_on.isSustainOn());
-        try std.testing.expect(!sustain_on.isSustainOff());
+        try t.expect(sustain_on.isSustainOn());
+        try t.expectFalse(sustain_on.isSustainOff());
 
         const sustain_off = ControlChangeEvent{
             .tick = 0,
@@ -4452,23 +4458,23 @@ test "Control change event - helper functions" {
             .controller = 64,
             .value = 63, // Maximum "off" value
         };
-        try std.testing.expect(!sustain_off.isSustainOn());
-        try std.testing.expect(sustain_off.isSustainOff());
+        try t.expectFalse(sustain_off.isSustainOn());
+        try t.expect(sustain_off.isSustainOff());
     }
 
     // Test getControllerType
     {
         const volume = ControlChangeEvent{ .tick = 0, .channel = 0, .controller = 7, .value = 100 };
-        try std.testing.expectEqual(ControlChangeEvent.ControllerType.channel_volume, volume.getControllerType().?);
+        try t.expectEq(ControlChangeEvent.ControllerType.channel_volume, volume.getControllerType().?);
 
         const expression = ControlChangeEvent{ .tick = 0, .channel = 0, .controller = 11, .value = 127 };
-        try std.testing.expectEqual(ControlChangeEvent.ControllerType.expression, expression.getControllerType().?);
+        try t.expectEq(ControlChangeEvent.ControllerType.expression, expression.getControllerType().?);
 
         const sustain = ControlChangeEvent{ .tick = 0, .channel = 0, .controller = 64, .value = 127 };
-        try std.testing.expectEqual(ControlChangeEvent.ControllerType.sustain_pedal, sustain.getControllerType().?);
+        try t.expectEq(ControlChangeEvent.ControllerType.sustain_pedal, sustain.getControllerType().?);
 
         const other = ControlChangeEvent{ .tick = 0, .channel = 0, .controller = 1, .value = 64 };
-        try std.testing.expectEqual(@as(?ControlChangeEvent.ControllerType, null), other.getControllerType());
+        try t.expectEq(null, other.getControllerType());
     }
 
     // Test getControllerName
@@ -4488,7 +4494,7 @@ test "Control change event - helper functions" {
                 .controller = test_case.num,
                 .value = 64,
             };
-            try std.testing.expectEqualStrings(test_case.name, event.getControllerName());
+            try t.expectStrEq(test_case.name, event.getControllerName());
         }
     }
 }
@@ -4516,39 +4522,39 @@ test "Program change event parsing - basic" {
     var result = try parseTrackEvents(allocator, &track_data);
     defer result.deinit(allocator);
 
-    try std.testing.expectEqual(@as(usize, 4), result.program_change_events.items.len);
+    try t.expectEq(4, result.program_change_events.items.len);
 
     // Check first program change (Acoustic Grand Piano)
     const piano = result.program_change_events.items[0];
-    try std.testing.expectEqual(@as(u32, 0), piano.tick);
-    try std.testing.expectEqual(@as(u4, 0), piano.channel);
-    try std.testing.expectEqual(@as(u7, 0), piano.program);
-    try std.testing.expectEqualStrings("Acoustic Grand Piano", piano.getInstrumentName());
-    try std.testing.expectEqualStrings("Piano", piano.getInstrumentFamily());
+    try t.expectEq(0, piano.tick);
+    try t.expectEq(0, piano.channel);
+    try t.expectEq(0, piano.program);
+    try t.expectStrEq("Acoustic Grand Piano", piano.getInstrumentName());
+    try t.expectStrEq("Piano", piano.getInstrumentFamily());
 
     // Check second program change (Acoustic Guitar nylon)
     const guitar = result.program_change_events.items[1];
-    try std.testing.expectEqual(@as(u32, 16), guitar.tick);
-    try std.testing.expectEqual(@as(u4, 1), guitar.channel);
-    try std.testing.expectEqual(@as(u7, 24), guitar.program);
-    try std.testing.expectEqualStrings("Acoustic Guitar (nylon)", guitar.getInstrumentName());
-    try std.testing.expectEqualStrings("Guitar", guitar.getInstrumentFamily());
+    try t.expectEq(16, guitar.tick);
+    try t.expectEq(1, guitar.channel);
+    try t.expectEq(24, guitar.program);
+    try t.expectStrEq("Acoustic Guitar (nylon)", guitar.getInstrumentName());
+    try t.expectStrEq("Guitar", guitar.getInstrumentFamily());
 
     // Check third program change (Trumpet)
     const trumpet = result.program_change_events.items[2];
-    try std.testing.expectEqual(@as(u32, 48), trumpet.tick);
-    try std.testing.expectEqual(@as(u4, 9), trumpet.channel);
-    try std.testing.expectEqual(@as(u7, 56), trumpet.program);
-    try std.testing.expectEqualStrings("Trumpet", trumpet.getInstrumentName());
-    try std.testing.expectEqualStrings("Brass", trumpet.getInstrumentFamily());
+    try t.expectEq(48, trumpet.tick);
+    try t.expectEq(9, trumpet.channel);
+    try t.expectEq(56, trumpet.program);
+    try t.expectStrEq("Trumpet", trumpet.getInstrumentName());
+    try t.expectStrEq("Brass", trumpet.getInstrumentFamily());
 
     // Check fourth program change (Gunshot)
     const gunshot = result.program_change_events.items[3];
-    try std.testing.expectEqual(@as(u32, 96), gunshot.tick);
-    try std.testing.expectEqual(@as(u4, 15), gunshot.channel);
-    try std.testing.expectEqual(@as(u7, 127), gunshot.program);
-    try std.testing.expectEqualStrings("Gunshot", gunshot.getInstrumentName());
-    try std.testing.expectEqualStrings("Sound Effects", gunshot.getInstrumentFamily());
+    try t.expectEq(96, gunshot.tick);
+    try t.expectEq(15, gunshot.channel);
+    try t.expectEq(127, gunshot.program);
+    try t.expectStrEq("Gunshot", gunshot.getInstrumentName());
+    try t.expectStrEq("Sound Effects", gunshot.getInstrumentFamily());
 }
 
 test "Program change event parsing - all instrument families" {
@@ -4594,7 +4600,7 @@ test "Program change event parsing - all instrument families" {
             .channel = 0,
             .program = test_case.program,
         };
-        try std.testing.expectEqualStrings(test_case.family, event.getInstrumentFamily());
+        try t.expectStrEq(test_case.family, event.getInstrumentFamily());
     }
 }
 
@@ -4622,17 +4628,17 @@ test "Program change event parsing - mixed with other events" {
     var result = try parseTrackEvents(allocator, &track_data);
     defer result.deinit(allocator);
 
-    try std.testing.expectEqual(@as(usize, 2), result.program_change_events.items.len);
-    try std.testing.expectEqual(@as(usize, 2), result.note_events.items.len);
-    try std.testing.expectEqual(@as(usize, 1), result.control_change_events.items.len);
+    try t.expectEq(2, result.program_change_events.items.len);
+    try t.expectEq(2, result.note_events.items.len);
+    try t.expectEq(1, result.control_change_events.items.len);
 
     // Verify program changes
-    try std.testing.expectEqual(@as(u7, 0), result.program_change_events.items[0].program);
-    try std.testing.expectEqual(@as(u7, 24), result.program_change_events.items[1].program);
+    try t.expectEq(0, result.program_change_events.items[0].program);
+    try t.expectEq(24, result.program_change_events.items[1].program);
 
     // Verify tick positions
-    try std.testing.expectEqual(@as(u32, 0), result.program_change_events.items[0].tick);
-    try std.testing.expectEqual(@as(u32, 32), result.program_change_events.items[1].tick);
+    try t.expectEq(0, result.program_change_events.items[0].tick);
+    try t.expectEq(32, result.program_change_events.items[1].tick);
 }
 
 test "Program change event parsing - running status" {
@@ -4661,30 +4667,30 @@ test "Program change event parsing - running status" {
     var result = try parseTrackEvents(allocator, &track_data);
     defer result.deinit(allocator);
 
-    try std.testing.expectEqual(@as(usize, 5), result.program_change_events.items.len);
+    try t.expectEq(5, result.program_change_events.items.len);
 
     // Verify all channel 0 program changes
-    try std.testing.expectEqual(@as(u4, 0), result.program_change_events.items[0].channel);
-    try std.testing.expectEqual(@as(u4, 0), result.program_change_events.items[1].channel);
-    try std.testing.expectEqual(@as(u4, 0), result.program_change_events.items[2].channel);
+    try t.expectEq(0, result.program_change_events.items[0].channel);
+    try t.expectEq(0, result.program_change_events.items[1].channel);
+    try t.expectEq(0, result.program_change_events.items[2].channel);
 
     // Verify channel 1 program changes
-    try std.testing.expectEqual(@as(u4, 1), result.program_change_events.items[3].channel);
-    try std.testing.expectEqual(@as(u4, 1), result.program_change_events.items[4].channel);
+    try t.expectEq(1, result.program_change_events.items[3].channel);
+    try t.expectEq(1, result.program_change_events.items[4].channel);
 
     // Verify programs
-    try std.testing.expectEqual(@as(u7, 0), result.program_change_events.items[0].program);
-    try std.testing.expectEqual(@as(u7, 1), result.program_change_events.items[1].program);
-    try std.testing.expectEqual(@as(u7, 4), result.program_change_events.items[2].program);
-    try std.testing.expectEqual(@as(u7, 56), result.program_change_events.items[3].program);
-    try std.testing.expectEqual(@as(u7, 57), result.program_change_events.items[4].program);
+    try t.expectEq(0, result.program_change_events.items[0].program);
+    try t.expectEq(1, result.program_change_events.items[1].program);
+    try t.expectEq(4, result.program_change_events.items[2].program);
+    try t.expectEq(56, result.program_change_events.items[3].program);
+    try t.expectEq(57, result.program_change_events.items[4].program);
 
     // Verify instrument names
-    try std.testing.expectEqualStrings("Acoustic Grand Piano", result.program_change_events.items[0].getInstrumentName());
-    try std.testing.expectEqualStrings("Bright Acoustic Piano", result.program_change_events.items[1].getInstrumentName());
-    try std.testing.expectEqualStrings("Electric Piano 1", result.program_change_events.items[2].getInstrumentName());
-    try std.testing.expectEqualStrings("Trumpet", result.program_change_events.items[3].getInstrumentName());
-    try std.testing.expectEqualStrings("Trombone", result.program_change_events.items[4].getInstrumentName());
+    try t.expectStrEq("Acoustic Grand Piano", result.program_change_events.items[0].getInstrumentName());
+    try t.expectStrEq("Bright Acoustic Piano", result.program_change_events.items[1].getInstrumentName());
+    try t.expectStrEq("Electric Piano 1", result.program_change_events.items[2].getInstrumentName());
+    try t.expectStrEq("Trumpet", result.program_change_events.items[3].getInstrumentName());
+    try t.expectStrEq("Trombone", result.program_change_events.items[4].getInstrumentName());
 }
 
 // TASK-016 Tests - New Channel Voice Message Parsing Tests
@@ -4708,31 +4714,31 @@ test "Polyphonic pressure event parsing - basic" {
     var result = try parseTrackEvents(allocator, &track_data);
     defer result.deinit(allocator);
 
-    try std.testing.expectEqual(@as(usize, 3), result.polyphonic_pressure_events.items.len);
+    try t.expectEq(3, result.polyphonic_pressure_events.items.len);
 
     // Check first event
     const event1 = result.polyphonic_pressure_events.items[0];
-    try std.testing.expectEqual(@as(u32, 0), event1.tick);
-    try std.testing.expectEqual(@as(u4, 0), event1.channel);
-    try std.testing.expectEqual(@as(u7, 60), event1.note); // C4
-    try std.testing.expectEqual(@as(u7, 100), event1.pressure);
-    try std.testing.expectEqual(@as(f32, 100.0 / 127.0), event1.getNormalizedPressure());
+    try t.expectEq(0, event1.tick);
+    try t.expectEq(0, event1.channel);
+    try t.expectEq(60, event1.note); // C4
+    try t.expectEq(100, event1.pressure);
+    try t.expectEq(100.0 / 127.0, event1.getNormalizedPressure());
 
     // Check second event
     const event2 = result.polyphonic_pressure_events.items[1];
-    try std.testing.expectEqual(@as(u32, 16), event2.tick);
-    try std.testing.expectEqual(@as(u4, 1), event2.channel);
-    try std.testing.expectEqual(@as(u7, 64), event2.note); // E4
-    try std.testing.expectEqual(@as(u7, 127), event2.pressure);
-    try std.testing.expectEqual(@as(f32, 1.0), event2.getNormalizedPressure());
+    try t.expectEq(16, event2.tick);
+    try t.expectEq(1, event2.channel);
+    try t.expectEq(64, event2.note); // E4
+    try t.expectEq(127, event2.pressure);
+    try t.expectEq(1.0, event2.getNormalizedPressure());
 
     // Check third event
     const event3 = result.polyphonic_pressure_events.items[2];
-    try std.testing.expectEqual(@as(u32, 32), event3.tick);
-    try std.testing.expectEqual(@as(u4, 2), event3.channel);
-    try std.testing.expectEqual(@as(u7, 67), event3.note); // G4
-    try std.testing.expectEqual(@as(u7, 0), event3.pressure);
-    try std.testing.expectEqual(@as(f32, 0.0), event3.getNormalizedPressure());
+    try t.expectEq(32, event3.tick);
+    try t.expectEq(2, event3.channel);
+    try t.expectEq(67, event3.note); // G4
+    try t.expectEq(0, event3.pressure);
+    try t.expectEq(0.0, event3.getNormalizedPressure());
 }
 
 test "Channel pressure event parsing - basic" {
@@ -4754,28 +4760,28 @@ test "Channel pressure event parsing - basic" {
     var result = try parseTrackEvents(allocator, &track_data);
     defer result.deinit(allocator);
 
-    try std.testing.expectEqual(@as(usize, 3), result.channel_pressure_events.items.len);
+    try t.expectEq(3, result.channel_pressure_events.items.len);
 
     // Check first event
     const event1 = result.channel_pressure_events.items[0];
-    try std.testing.expectEqual(@as(u32, 0), event1.tick);
-    try std.testing.expectEqual(@as(u4, 0), event1.channel);
-    try std.testing.expectEqual(@as(u7, 100), event1.pressure);
-    try std.testing.expectEqual(@as(f32, 100.0 / 127.0), event1.getNormalizedPressure());
+    try t.expectEq(0, event1.tick);
+    try t.expectEq(0, event1.channel);
+    try t.expectEq(100, event1.pressure);
+    try t.expectEq(100.0 / 127.0, event1.getNormalizedPressure());
 
     // Check second event
     const event2 = result.channel_pressure_events.items[1];
-    try std.testing.expectEqual(@as(u32, 16), event2.tick);
-    try std.testing.expectEqual(@as(u4, 1), event2.channel);
-    try std.testing.expectEqual(@as(u7, 127), event2.pressure);
-    try std.testing.expectEqual(@as(f32, 1.0), event2.getNormalizedPressure());
+    try t.expectEq(16, event2.tick);
+    try t.expectEq(1, event2.channel);
+    try t.expectEq(127, event2.pressure);
+    try t.expectEq(1.0, event2.getNormalizedPressure());
 
     // Check third event
     const event3 = result.channel_pressure_events.items[2];
-    try std.testing.expectEqual(@as(u32, 32), event3.tick);
-    try std.testing.expectEqual(@as(u4, 15), event3.channel);
-    try std.testing.expectEqual(@as(u7, 0), event3.pressure);
-    try std.testing.expectEqual(@as(f32, 0.0), event3.getNormalizedPressure());
+    try t.expectEq(32, event3.tick);
+    try t.expectEq(15, event3.channel);
+    try t.expectEq(0, event3.pressure);
+    try t.expectEq(0.0, event3.getNormalizedPressure());
 }
 
 test "Pitch bend event parsing - basic" {
@@ -4799,41 +4805,41 @@ test "Pitch bend event parsing - basic" {
     var result = try parseTrackEvents(allocator, &track_data);
     defer result.deinit(allocator);
 
-    try std.testing.expectEqual(@as(usize, 4), result.pitch_bend_events.items.len);
+    try t.expectEq(4, result.pitch_bend_events.items.len);
 
     // Check center pitch bend (no bend)
     const event1 = result.pitch_bend_events.items[0];
-    try std.testing.expectEqual(@as(u32, 0), event1.tick);
-    try std.testing.expectEqual(@as(u4, 0), event1.channel);
-    try std.testing.expectEqual(@as(u14, 8192), event1.value);
-    try std.testing.expectEqual(@as(i16, 0), event1.getSignedValue());
-    try std.testing.expectEqual(@as(f32, 0.0), event1.getNormalizedValue());
-    try std.testing.expectEqual(@as(f32, 0.0), event1.getCents());
+    try t.expectEq(0, event1.tick);
+    try t.expectEq(0, event1.channel);
+    try t.expectEq(8192, event1.value);
+    try t.expectEq(0, event1.getSignedValue());
+    try t.expectEq(0.0, event1.getNormalizedValue());
+    try t.expectEq(0.0, event1.getCents());
 
     // Check minimum pitch bend (maximum down)
     const event2 = result.pitch_bend_events.items[1];
-    try std.testing.expectEqual(@as(u32, 16), event2.tick);
-    try std.testing.expectEqual(@as(u4, 1), event2.channel);
-    try std.testing.expectEqual(@as(u14, 0), event2.value);
-    try std.testing.expectEqual(@as(i16, -8192), event2.getSignedValue());
-    try std.testing.expectEqual(@as(f32, -1.0), event2.getNormalizedValue());
-    try std.testing.expectEqual(@as(f32, -200.0), event2.getCents());
+    try t.expectEq(16, event2.tick);
+    try t.expectEq(1, event2.channel);
+    try t.expectEq(0, event2.value);
+    try t.expectEq(-8192, event2.getSignedValue());
+    try t.expectEq(-1.0, event2.getNormalizedValue());
+    try t.expectEq(-200.0, event2.getCents());
 
     // Check maximum pitch bend (maximum up)
     const event3 = result.pitch_bend_events.items[2];
-    try std.testing.expectEqual(@as(u32, 32), event3.tick);
-    try std.testing.expectEqual(@as(u4, 2), event3.channel);
-    try std.testing.expectEqual(@as(u14, 16383), event3.value);
-    try std.testing.expectEqual(@as(i16, 8191), event3.getSignedValue());
+    try t.expectEq(32, event3.tick);
+    try t.expectEq(2, event3.channel);
+    try t.expectEq(16383, event3.value);
+    try t.expectEq(8191, event3.getSignedValue());
 
     // Check slight up bend
     const event4 = result.pitch_bend_events.items[3];
-    try std.testing.expectEqual(@as(u32, 48), event4.tick);
-    try std.testing.expectEqual(@as(u4, 15), event4.channel);
-    try std.testing.expectEqual(@as(u14, 12288), event4.value);
-    try std.testing.expectEqual(@as(i16, 4096), event4.getSignedValue());
-    try std.testing.expectEqual(@as(f32, 0.5), event4.getNormalizedValue());
-    try std.testing.expectEqual(@as(f32, 100.0), event4.getCents());
+    try t.expectEq(48, event4.tick);
+    try t.expectEq(15, event4.channel);
+    try t.expectEq(12288, event4.value);
+    try t.expectEq(4096, event4.getSignedValue());
+    try t.expectEq(0.5, event4.getNormalizedValue());
+    try t.expectEq(100.0, event4.getCents());
 }
 
 test "All channel voice messages - running status" {
@@ -4862,19 +4868,19 @@ test "All channel voice messages - running status" {
     defer result.deinit(allocator);
 
     // Should have 2 polyphonic pressure events
-    try std.testing.expectEqual(@as(usize, 2), result.polyphonic_pressure_events.items.len);
-    try std.testing.expectEqual(@as(u7, 60), result.polyphonic_pressure_events.items[0].note); // C4
-    try std.testing.expectEqual(@as(u7, 64), result.polyphonic_pressure_events.items[1].note); // E4
+    try t.expectEq(2, result.polyphonic_pressure_events.items.len);
+    try t.expectEq(60, result.polyphonic_pressure_events.items[0].note); // C4
+    try t.expectEq(64, result.polyphonic_pressure_events.items[1].note); // E4
 
     // Should have 2 channel pressure events
-    try std.testing.expectEqual(@as(usize, 2), result.channel_pressure_events.items.len);
-    try std.testing.expectEqual(@as(u7, 80), result.channel_pressure_events.items[0].pressure);
-    try std.testing.expectEqual(@as(u7, 96), result.channel_pressure_events.items[1].pressure);
+    try t.expectEq(2, result.channel_pressure_events.items.len);
+    try t.expectEq(80, result.channel_pressure_events.items[0].pressure);
+    try t.expectEq(96, result.channel_pressure_events.items[1].pressure);
 
     // Should have 2 pitch bend events
-    try std.testing.expectEqual(@as(usize, 2), result.pitch_bend_events.items.len);
-    try std.testing.expectEqual(@as(u14, 8192), result.pitch_bend_events.items[0].value); // Center
-    try std.testing.expectEqual(@as(u14, 16383), result.pitch_bend_events.items[1].value); // Max
+    try t.expectEq(2, result.pitch_bend_events.items.len);
+    try t.expectEq(8192, result.pitch_bend_events.items[0].value); // Center
+    try t.expectEq(16383, result.pitch_bend_events.items[1].value); // Max
 }
 
 test "Control change events - all 128 controllers" {
@@ -4896,22 +4902,22 @@ test "Control change events - all 128 controllers" {
     var result = try parseTrackEvents(allocator, &track_data);
     defer result.deinit(allocator);
 
-    try std.testing.expectEqual(@as(usize, 3), result.control_change_events.items.len);
+    try t.expectEq(3, result.control_change_events.items.len);
 
     // Check controller 0 (Bank Select MSB)
     const cc0 = result.control_change_events.items[0];
-    try std.testing.expectEqual(@as(u7, 0), cc0.controller);
-    try std.testing.expectEqual(@as(u7, 0), cc0.value);
+    try t.expectEq(0, cc0.controller);
+    try t.expectEq(0, cc0.value);
 
     // Check controller 1 (Modulation Wheel)
     const cc1 = result.control_change_events.items[1];
-    try std.testing.expectEqual(@as(u7, 1), cc1.controller);
-    try std.testing.expectEqual(@as(u7, 64), cc1.value);
+    try t.expectEq(1, cc1.controller);
+    try t.expectEq(64, cc1.value);
 
     // Check controller 127 (Poly Mode On)
     const cc127 = result.control_change_events.items[2];
-    try std.testing.expectEqual(@as(u7, 127), cc127.controller);
-    try std.testing.expectEqual(@as(u7, 127), cc127.value);
+    try t.expectEq(127, cc127.controller);
+    try t.expectEq(127, cc127.value);
 }
 
 // TASK-018: RPN/NRPN Controller Processing Tests
@@ -4938,27 +4944,27 @@ test "RPN processing - pitch bend range setting (TASK-018)" {
     defer result.deinit(allocator);
 
     // Should have 3 control change events
-    try std.testing.expectEqual(@as(usize, 3), result.control_change_events.items.len);
+    try t.expectEq(3, result.control_change_events.items.len);
 
     // Should have 1 RPN event (created on Data Entry MSB)
-    try std.testing.expectEqual(@as(usize, 1), result.rpn_events.items.len);
+    try t.expectEq(1, result.rpn_events.items.len);
 
     const rpn_event = result.rpn_events.items[0];
-    try std.testing.expectEqual(false, rpn_event.is_nrpn); // This is an RPN
-    try std.testing.expectEqual(@as(u16, 0x0000), rpn_event.parameter); // RPN 0,0
-    try std.testing.expectEqual(@as(u14, 12 << 7), rpn_event.value); // 12 in MSB
-    try std.testing.expectEqual(@as(u4, 0), rpn_event.channel);
+    try t.expectEq(false, rpn_event.is_nrpn); // This is an RPN
+    try t.expectEq(0x0000, rpn_event.parameter); // RPN 0,0
+    try t.expectEq(12 << 7, rpn_event.value); // 12 in MSB
+    try t.expectEq(0, rpn_event.channel);
 
     // Test RPN type classification
     if (rpn_event.getRpnType()) |rpn_type| {
-        try std.testing.expectEqual(RpnType.pitch_bend_range, rpn_type);
-        try std.testing.expectEqualStrings("Pitch Bend Range", rpn_type.getName());
+        try t.expectEq(RpnType.pitch_bend_range, rpn_type);
+        try t.expectStrEq("Pitch Bend Range", rpn_type.getName());
     } else {
-        try std.testing.expect(false); // Should have RPN type
+        try t.expect(false); // Should have RPN type
     }
 
     // Test interpreted value (should be 12.0 semitones)
-    try std.testing.expectEqual(@as(f32, 12.0), rpn_event.getInterpretedValue());
+    try t.expectEq(12.0, rpn_event.getInterpretedValue());
 }
 
 test "RPN processing - fine tuning (TASK-018)" {
@@ -4985,16 +4991,16 @@ test "RPN processing - fine tuning (TASK-018)" {
     defer result.deinit(allocator);
 
     // Should have 2 RPN events (one on MSB, updated on LSB)
-    try std.testing.expectEqual(@as(usize, 2), result.rpn_events.items.len);
+    try t.expectEq(2, result.rpn_events.items.len);
 
     const rpn_event = result.rpn_events.items[1]; // Final event with LSB
-    try std.testing.expectEqual(false, rpn_event.is_nrpn);
-    try std.testing.expectEqual(@as(u16, 0x0001), rpn_event.parameter); // RPN 0,1
-    try std.testing.expectEqual(@as(u14, (96 << 7) | 0), rpn_event.value);
+    try t.expectEq(false, rpn_event.is_nrpn);
+    try t.expectEq(0x0001, rpn_event.parameter); // RPN 0,1
+    try t.expectEq((96 << 7) | 0, rpn_event.value);
 
     if (rpn_event.getRpnType()) |rpn_type| {
-        try std.testing.expectEqual(RpnType.fine_tuning, rpn_type);
-        try std.testing.expectEqualStrings("Fine Tuning", rpn_type.getName());
+        try t.expectEq(RpnType.fine_tuning, rpn_type);
+        try t.expectStrEq("Fine Tuning", rpn_type.getName());
     }
 }
 
@@ -5019,19 +5025,19 @@ test "NRPN processing - manufacturer specific parameter (TASK-018)" {
     defer result.deinit(allocator);
 
     // Should have 1 RPN event (which is actually NRPN)
-    try std.testing.expectEqual(@as(usize, 1), result.rpn_events.items.len);
+    try t.expectEq(1, result.rpn_events.items.len);
 
     const nrpn_event = result.rpn_events.items[0];
-    try std.testing.expectEqual(true, nrpn_event.is_nrpn); // This is an NRPN
-    try std.testing.expectEqual(@as(u16, (20 << 7) | 30), nrpn_event.parameter); // NRPN 20,30
-    try std.testing.expectEqual(@as(u14, 100 << 7), nrpn_event.value);
+    try t.expectEq(true, nrpn_event.is_nrpn); // This is an NRPN
+    try t.expectEq((20 << 7) | 30, nrpn_event.parameter); // NRPN 20,30
+    try t.expectEq(100 << 7, nrpn_event.value);
 
     // NRPN should not have RPN type
-    try std.testing.expectEqual(@as(?RpnType, null), nrpn_event.getRpnType());
-    try std.testing.expectEqualStrings("NRPN", nrpn_event.getParameterName());
+    try t.expectEq(null, nrpn_event.getRpnType());
+    try t.expectStrEq("NRPN", nrpn_event.getParameterName());
 
     // Interpreted value should be raw value for NRPN
-    try std.testing.expectEqual(@as(f32, @floatFromInt(100 << 7)), nrpn_event.getInterpretedValue());
+    try t.expectApproxAbs(f32, @floatFromInt(100 << 7), nrpn_event.getInterpretedValue(), 0.01);
 }
 
 test "RPN processing - null RPN deselection (TASK-018)" {
@@ -5055,14 +5061,14 @@ test "RPN processing - null RPN deselection (TASK-018)" {
     defer result.deinit(allocator);
 
     // Should have 1 RPN event
-    try std.testing.expectEqual(@as(usize, 1), result.rpn_events.items.len);
+    try t.expectEq(1, result.rpn_events.items.len);
 
     const rpn_event = result.rpn_events.items[0];
-    try std.testing.expectEqual(@as(u16, 0x3FFF), rpn_event.parameter); // RPN 127,127 (0x3FFF = (127<<7)|127)
+    try t.expectEq(0x3FFF, rpn_event.parameter); // RPN 127,127 (0x3FFF = (127<<7)|127)
 
     if (rpn_event.getRpnType()) |rpn_type| {
-        try std.testing.expectEqual(RpnType.null_rpn, rpn_type);
-        try std.testing.expectEqualStrings("Null RPN", rpn_type.getName());
+        try t.expectEq(RpnType.null_rpn, rpn_type);
+        try t.expectStrEq("Null RPN", rpn_type.getName());
     }
 }
 
@@ -5071,32 +5077,32 @@ test "RPN state machine - proper sequence handling (TASK-018)" {
 
     // Test RPN selection
     rpn_state.selectRpn(0, 0); // Select RPN 0,0 (Pitch Bend Range)
-    try std.testing.expectEqual(true, rpn_state.rpn_selected);
-    try std.testing.expectEqual(false, rpn_state.nrpn_selected);
-    try std.testing.expectEqual(@as(?u7, 0), rpn_state.current_rpn_msb);
-    try std.testing.expectEqual(@as(?u7, 0), rpn_state.current_rpn_lsb);
+    try t.expectEq(true, rpn_state.rpn_selected);
+    try t.expectEq(false, rpn_state.nrpn_selected);
+    try t.expectEq(0, rpn_state.current_rpn_msb);
+    try t.expectEq(0, rpn_state.current_rpn_lsb);
 
     // Test data entry creates event
     if (rpn_state.setDataEntry(2, null)) |rpn_event| {
-        try std.testing.expectEqual(false, rpn_event.is_nrpn);
-        try std.testing.expectEqual(@as(u16, 0x0000), rpn_event.parameter);
-        try std.testing.expectEqual(@as(u14, 2 << 7), rpn_event.value);
+        try t.expectEq(false, rpn_event.is_nrpn);
+        try t.expectEq(0x0000, rpn_event.parameter);
+        try t.expectEq(2 << 7, rpn_event.value);
     } else {
-        try std.testing.expect(false); // Should have created an event
+        try t.expect(false); // Should have created an event
     }
 
     // Test NRPN selection overwrites RPN
     rpn_state.selectNrpn(10, 20);
-    try std.testing.expectEqual(false, rpn_state.rpn_selected);
-    try std.testing.expectEqual(true, rpn_state.nrpn_selected);
-    try std.testing.expectEqual(@as(?u7, 10), rpn_state.current_nrpn_msb);
-    try std.testing.expectEqual(@as(?u7, 20), rpn_state.current_nrpn_lsb);
+    try t.expectEq(false, rpn_state.rpn_selected);
+    try t.expectEq(true, rpn_state.nrpn_selected);
+    try t.expectEq(10, rpn_state.current_nrpn_msb);
+    try t.expectEq(20, rpn_state.current_nrpn_lsb);
 
     // Reset should clear all state
     rpn_state.reset();
-    try std.testing.expectEqual(false, rpn_state.rpn_selected);
-    try std.testing.expectEqual(false, rpn_state.nrpn_selected);
-    try std.testing.expectEqual(@as(?u7, null), rpn_state.current_rpn_msb);
+    try t.expectEq(false, rpn_state.rpn_selected);
+    try t.expectEq(false, rpn_state.nrpn_selected);
+    try t.expectEq(null, rpn_state.current_rpn_msb);
 }
 
 test "RPN/NRPN performance benchmark - target < 10μs per RPN (TASK-018)" {
@@ -5133,12 +5139,12 @@ test "RPN/NRPN performance benchmark - target < 10μs per RPN (TASK-018)" {
     const us_per_rpn = elapsed_us / 3.0; // 3 RPN events
 
     // Should have parsed 3 RPN events
-    try std.testing.expectEqual(@as(usize, 3), result.rpn_events.items.len);
+    try t.expectEq(3, result.rpn_events.items.len);
 
     // Performance target: < 10μs per RPN
-    try std.testing.expect(us_per_rpn < 10.0);
+    try t.expect(us_per_rpn < 10.0);
 
-    std.debug.print("\nRPN Performance: {d:.2}μs per RPN (target: <10μs)\n", .{us_per_rpn});
+    log.perf("RPN processing", us_per_rpn, "μs per RPN (target: <10μs)");
 }
 
 // Text Event parsing tests for TASK-019
@@ -5162,14 +5168,14 @@ test "Text event parsing - basic text event" {
     defer result.deinit(allocator);
 
     // Should have parsed 1 text event
-    try std.testing.expectEqual(@as(usize, 1), result.text_events.items.len);
+    try t.expectEq(1, result.text_events.items.len);
 
     const text_event = result.text_events.items[0];
-    try std.testing.expectEqual(@as(u32, 0), text_event.tick);
-    try std.testing.expectEqual(@as(u8, 0x01), text_event.event_type);
-    try std.testing.expectEqualStrings("Hello", text_event.text);
-    try std.testing.expect(text_event.isValidUtf8());
-    try std.testing.expectEqualStrings("Text", text_event.getTypeName());
+    try t.expectEq(0, text_event.tick);
+    try t.expectEq(0x01, text_event.event_type);
+    try t.expectStrEq("Hello", text_event.text);
+    try t.expect(text_event.isValidUtf8());
+    try t.expectStrEq("Text", text_event.getTypeName());
 }
 
 test "Text event parsing - all standard text types" {
@@ -5216,7 +5222,7 @@ test "Text event parsing - all standard text types" {
     defer result.deinit(allocator);
 
     // Should have parsed 7 text events
-    try std.testing.expectEqual(@as(usize, 7), result.text_events.items.len);
+    try t.expectEq(7, result.text_events.items.len);
 
     // Verify each text event
     const expected_data = [_]struct { tick: u32, event_type: u8, text: []const u8, type_name: []const u8 }{
@@ -5231,11 +5237,11 @@ test "Text event parsing - all standard text types" {
 
     for (expected_data, 0..) |expected, i| {
         const text_event = result.text_events.items[i];
-        try std.testing.expectEqual(expected.tick, text_event.tick);
-        try std.testing.expectEqual(expected.event_type, text_event.event_type);
-        try std.testing.expectEqualStrings(expected.text, text_event.text);
-        try std.testing.expectEqualStrings(expected.type_name, text_event.getTypeName());
-        try std.testing.expect(text_event.isValidUtf8());
+        try t.expectEq(expected.tick, text_event.tick);
+        try t.expectEq(expected.event_type, text_event.event_type);
+        try t.expectStrEq(expected.text, text_event.text);
+        try t.expectStrEq(expected.type_name, text_event.getTypeName());
+        try t.expect(text_event.isValidUtf8());
     }
 }
 
@@ -5259,10 +5265,10 @@ test "Text event parsing - UTF-8 validation" {
     defer result_valid.deinit(allocator);
 
     // Should have parsed 1 text event with valid UTF-8
-    try std.testing.expectEqual(@as(usize, 1), result_valid.text_events.items.len);
+    try t.expectEq(1, result_valid.text_events.items.len);
     const text_event = result_valid.text_events.items[0];
-    try std.testing.expect(text_event.isValidUtf8());
-    try std.testing.expectEqualStrings("Hello © !", text_event.text);
+    try t.expect(text_event.isValidUtf8());
+    try t.expectStrEq("Hello © !", text_event.text);
 
     // Track with invalid UTF-8 - should be skipped
     const track_data_invalid = [_]u8{
@@ -5277,8 +5283,8 @@ test "Text event parsing - UTF-8 validation" {
     defer result_invalid.deinit(allocator);
 
     // Should have skipped the invalid UTF-8 text event
-    try std.testing.expectEqual(@as(usize, 0), result_invalid.text_events.items.len);
-    try std.testing.expectEqual(@as(u32, 2), result_invalid.events_skipped); // Text event + End of Track
+    try t.expectEq(0, result_invalid.text_events.items.len);
+    try t.expectEq(2, result_invalid.events_skipped); // Text event + End of Track
 }
 
 test "Text event parsing - empty text" {
@@ -5298,8 +5304,8 @@ test "Text event parsing - empty text" {
     defer result.deinit(allocator);
 
     // Empty text events should be skipped
-    try std.testing.expectEqual(@as(usize, 0), result.text_events.items.len);
-    try std.testing.expectEqual(@as(u32, 2), result.events_skipped); // Empty text event + End of Track
+    try t.expectEq(0, result.text_events.items.len);
+    try t.expectEq(2, result.events_skipped); // Empty text event + End of Track
 }
 
 test "Text event parsing - mixed with other meta events" {
@@ -5335,19 +5341,19 @@ test "Text event parsing - mixed with other meta events" {
     defer result.deinit(allocator);
 
     // Verify all meta events were parsed
-    try std.testing.expectEqual(@as(usize, 3), result.text_events.items.len); // 3 text events
-    try std.testing.expectEqual(@as(usize, 1), result.tempo_events.items.len);
-    try std.testing.expectEqual(@as(usize, 1), result.time_signature_events.items.len);
+    try t.expectEq(3, result.text_events.items.len); // 3 text events
+    try t.expectEq(1, result.tempo_events.items.len);
+    try t.expectEq(1, result.time_signature_events.items.len);
 
     // Verify text events
-    try std.testing.expectEqualStrings("Test Son", result.text_events.items[0].text);
-    try std.testing.expectEqual(@as(u8, 0x03), result.text_events.items[0].event_type);
+    try t.expectStrEq("Test Son", result.text_events.items[0].text);
+    try t.expectEq(0x03, result.text_events.items[0].event_type);
 
-    try std.testing.expectEqualStrings("Hello", result.text_events.items[1].text);
-    try std.testing.expectEqual(@as(u8, 0x01), result.text_events.items[1].event_type);
+    try t.expectStrEq("Hello", result.text_events.items[1].text);
+    try t.expectEq(0x01, result.text_events.items[1].event_type);
 
-    try std.testing.expectEqualStrings("La ", result.text_events.items[2].text);
-    try std.testing.expectEqual(@as(u8, 0x05), result.text_events.items[2].event_type);
+    try t.expectStrEq("La ", result.text_events.items[2].text);
+    try t.expectEq(0x05, result.text_events.items[2].event_type);
 }
 
 test "Text event parsing - performance target" {
@@ -5356,7 +5362,7 @@ test "Text event parsing - performance target" {
     const allocator = gpa.allocator();
 
     // Create track with many text events for performance testing
-    var track_data = std.ArrayList(u8).init(allocator);
+    var track_data = containers.List(u8).init(allocator);
     defer track_data.deinit();
 
     // Add 100 text events
@@ -5380,15 +5386,15 @@ test "Text event parsing - performance target" {
     const ns_per_meta_event = @as(f64, @floatFromInt(elapsed_ns)) / 100.0;
 
     // Should have parsed 100 text events
-    try std.testing.expectEqual(@as(usize, 100), result.text_events.items.len);
+    try t.expectEq(100, result.text_events.items.len);
 
     // Performance target: < 10μs per text meta event (including UTF-8 validation and memory allocation)
     // This is higher than the general 100ns target because text events require UTF-8 validation
     // and dynamic memory allocation for storing the text data
     // Note: Performance may vary based on system and memory allocator, so we just log the results
-    // try std.testing.expect(ns_per_meta_event < 10000.0);
+    // try t.expect(ns_per_meta_event < 10000.0);
 
-    std.debug.print("\nText Event Performance: {d:.2}ns per meta event (target: <10μs)\n", .{ns_per_meta_event});
+    log.perf("Text Event", ns_per_meta_event, "ns per meta event (target: <10μs)");
 }
 
 test "End of Track meta event - correct handling" {
@@ -5412,9 +5418,9 @@ test "End of Track meta event - correct handling" {
     defer result.deinit(allocator);
 
     // Should have parsed the text event but stopped at End of Track
-    try std.testing.expectEqual(@as(usize, 1), result.text_events.items.len);
-    try std.testing.expectEqual(@as(usize, 0), result.note_events.items.len); // No notes after end
-    try std.testing.expectEqualStrings("Test", result.text_events.items[0].text);
+    try t.expectEq(1, result.text_events.items.len);
+    try t.expectEq(0, result.note_events.items.len); // No notes after end
+    try t.expectStrEq("Test", result.text_events.items[0].text);
 }
 
 test "End of Track meta event - only 0x2F is valid" {
@@ -5437,12 +5443,12 @@ test "End of Track meta event - only 0x2F is valid" {
     defer result.deinit(allocator);
 
     // Should have parsed the note event since 0x21 is not End of Track
-    try std.testing.expectEqual(@as(usize, 1), result.note_events.items.len);
+    try t.expectEq(1, result.note_events.items.len);
 
     // Verify the note event was parsed correctly
     const note_event = result.note_events.items[0];
-    try std.testing.expectEqual(@as(u8, 0x3C), note_event.note);
-    try std.testing.expectEqual(@as(u8, 0x64), note_event.velocity);
+    try t.expectEq(0x3C, note_event.note);
+    try t.expectEq(0x64, note_event.velocity);
 }
 
 // System Exclusive Tests - Implements TASK-020 per MIDI_Architecture_Reference.md Section 2.4
@@ -5469,12 +5475,12 @@ test "SysEx handling - Roland manufacturer ID (single byte)" {
     defer result.deinit(allocator);
 
     // SysEx should be skipped, note should be parsed
-    try std.testing.expectEqual(@as(usize, 1), result.note_events.items.len);
-    try std.testing.expectEqual(@as(u32, 1), result.events_parsed); // Note only
-    try std.testing.expectEqual(@as(u32, 2), result.events_skipped); // SysEx + End of Track
+    try t.expectEq(1, result.note_events.items.len);
+    try t.expectEq(1, result.events_parsed); // Note only
+    try t.expectEq(2, result.events_skipped); // SysEx + End of Track
 
     const note_event = result.note_events.items[0];
-    try std.testing.expectEqual(@as(u8, 0x3C), note_event.note);
+    try t.expectEq(0x3C, note_event.note);
 }
 
 test "SysEx handling - Alesis manufacturer ID (three bytes)" {
@@ -5497,9 +5503,9 @@ test "SysEx handling - Alesis manufacturer ID (three bytes)" {
     defer result.deinit(allocator);
 
     // SysEx should be skipped successfully
-    try std.testing.expectEqual(@as(usize, 0), result.note_events.items.len);
-    try std.testing.expectEqual(@as(u32, 0), result.events_parsed); // No events parsed
-    try std.testing.expectEqual(@as(u32, 2), result.events_skipped); // SysEx + End of Track
+    try t.expectEq(0, result.note_events.items.len);
+    try t.expectEq(0, result.events_parsed); // No events parsed
+    try t.expectEq(2, result.events_skipped); // SysEx + End of Track
 }
 
 test "SysEx handling - empty SysEx message" {
@@ -5520,9 +5526,9 @@ test "SysEx handling - empty SysEx message" {
     defer result.deinit(allocator);
 
     // Empty SysEx should be handled gracefully
-    try std.testing.expectEqual(@as(usize, 0), result.note_events.items.len);
-    try std.testing.expectEqual(@as(u32, 0), result.events_parsed); // No events parsed
-    try std.testing.expectEqual(@as(u32, 2), result.events_skipped); // SysEx + End of Track
+    try t.expectEq(0, result.note_events.items.len);
+    try t.expectEq(0, result.events_parsed); // No events parsed
+    try t.expectEq(2, result.events_skipped); // SysEx + End of Track
 }
 
 test "SysEx handling - truncated SysEx (missing F7)" {
@@ -5540,7 +5546,7 @@ test "SysEx handling - truncated SysEx (missing F7)" {
 
     // Should return TruncatedSysEx error
     const result = parseTrackEvents(allocator, &track_data);
-    try std.testing.expectError(error_mod.MidiError.TruncatedSysEx, result);
+    try t.expectErr(error_mod.MidiError.TruncatedSysEx, result);
 }
 
 test "SysEx handling - invalid byte in SysEx data" {
@@ -5561,7 +5567,7 @@ test "SysEx handling - invalid byte in SysEx data" {
 
     // Should return TruncatedSysEx error due to invalid byte
     const result = parseTrackEvents(allocator, &track_data);
-    try std.testing.expectError(error_mod.MidiError.TruncatedSysEx, result);
+    try t.expectErr(error_mod.MidiError.TruncatedSysEx, result);
 }
 
 test "SysEx handling - buffer overrun protection" {
@@ -5570,7 +5576,7 @@ test "SysEx handling - buffer overrun protection" {
     const allocator = gpa.allocator();
 
     // Create a large SysEx that exceeds the 64KB limit
-    var large_track_data = std.ArrayList(u8).init(allocator);
+    var large_track_data = containers.List(u8).init(allocator);
     defer large_track_data.deinit();
 
     try large_track_data.append(0x00); // Delta time: 0
@@ -5587,25 +5593,25 @@ test "SysEx handling - buffer overrun protection" {
 
     // Should return TruncatedSysEx error due to size limit
     const result = parseTrackEvents(allocator, large_track_data.items);
-    try std.testing.expectError(error_mod.MidiError.TruncatedSysEx, result);
+    try t.expectErr(error_mod.MidiError.TruncatedSysEx, result);
 }
 
 test "SysEx manufacturer name lookup" {
     // Test single-byte manufacturer IDs
-    try std.testing.expectEqualStrings("Roland", getManufacturerName(0x41, null, null));
-    try std.testing.expectEqualStrings("Korg", getManufacturerName(0x42, null, null));
-    try std.testing.expectEqualStrings("Yamaha", getManufacturerName(0x43, null, null));
-    try std.testing.expectEqualStrings("Oberheim", getManufacturerName(0x47, null, null));
-    try std.testing.expectEqualStrings("Sequential Circuits", getManufacturerName(0x01, null, null));
-    try std.testing.expectEqualStrings("Unknown", getManufacturerName(0x99, null, null));
+    try t.expectStrEq("Roland", getManufacturerName(0x41, null, null));
+    try t.expectStrEq("Korg", getManufacturerName(0x42, null, null));
+    try t.expectStrEq("Yamaha", getManufacturerName(0x43, null, null));
+    try t.expectStrEq("Oberheim", getManufacturerName(0x47, null, null));
+    try t.expectStrEq("Sequential Circuits", getManufacturerName(0x01, null, null));
+    try t.expectStrEq("Unknown", getManufacturerName(0x99, null, null));
 
     // Test three-byte manufacturer IDs
-    try std.testing.expectEqualStrings("Alesis", getManufacturerName(0x00, 0x00, 0x0E));
-    try std.testing.expectEqualStrings("Allen & Heath", getManufacturerName(0x00, 0x00, 0x1A));
-    try std.testing.expectEqualStrings("Propellerhead", getManufacturerName(0x00, 0x00, 0x66));
-    try std.testing.expectEqualStrings("Focusrite/Novation", getManufacturerName(0x00, 0x20, 0x29));
-    try std.testing.expectEqualStrings("Unknown", getManufacturerName(0x00, 0x00, 0x99));
-    try std.testing.expectEqualStrings("Unknown", getManufacturerName(0x00, 0x99, 0x99));
+    try t.expectStrEq("Alesis", getManufacturerName(0x00, 0x00, 0x0E));
+    try t.expectStrEq("Allen & Heath", getManufacturerName(0x00, 0x00, 0x1A));
+    try t.expectStrEq("Propellerhead", getManufacturerName(0x00, 0x00, 0x66));
+    try t.expectStrEq("Focusrite/Novation", getManufacturerName(0x00, 0x20, 0x29));
+    try t.expectStrEq("Unknown", getManufacturerName(0x00, 0x00, 0x99));
+    try t.expectStrEq("Unknown", getManufacturerName(0x00, 0x99, 0x99));
 }
 
 test "SysEx handling - performance test" {
@@ -5614,7 +5620,7 @@ test "SysEx handling - performance test" {
     const allocator = gpa.allocator();
 
     // Create a moderately sized SysEx (1KB) to test performance
-    var track_data = std.ArrayList(u8).init(allocator);
+    var track_data = containers.List(u8).init(allocator);
     defer track_data.deinit();
 
     try track_data.append(0x00); // Delta time: 0
@@ -5643,10 +5649,10 @@ test "SysEx handling - performance test" {
     const duration_us = @as(f64, @floatFromInt(duration_ns)) / 1000.0;
 
     // SysEx should be processed successfully
-    try std.testing.expectEqual(@as(u32, 0), result.events_parsed); // No events parsed
-    try std.testing.expectEqual(@as(u32, 2), result.events_skipped); // SysEx + End of Track
+    try t.expectEq(0, result.events_parsed); // No events parsed
+    try t.expectEq(2, result.events_skipped); // SysEx + End of Track
 
     // Performance requirement: < 1μs per SysEx (this is a rough test)
     // Note: This test may be environment dependent
-    std.debug.print("SysEx processing time: {d:.2} μs\n", .{duration_us});
+    log.perf("SysEx processing", duration_us, "μs");
 }

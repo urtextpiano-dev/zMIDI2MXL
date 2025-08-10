@@ -1,0 +1,263 @@
+const std = @import("std");
+const containers = @import("../utils/containers.zig");
+const log = @import("../utils/log.zig");
+
+const NUM_ITERATIONS = 50;
+const SORT_SIZE = 10000;
+
+const BenchResult = struct {
+    name: []const u8,
+    median_ns: u64,
+    p95_ns: u64,
+    min_ns: u64,
+    max_ns: u64,
+};
+
+const Item = struct {
+    tick: u32,
+    value: u64,
+};
+
+/// Sort items using simple comparison
+pub fn sortItems(items: []Item) void {
+    const compareByTick = struct {
+        fn compare(_: void, a: Item, b: Item) bool {
+            return a.tick < b.tick;
+        }
+    }.compare;
+    std.sort.pdq(Item, items, {}, compareByTick);
+}
+
+/// Robust percentage calculation with proper handling of edge cases
+fn calculatePercentage(baseline: u64, current: u64) f64 {
+    if (baseline == 0) {
+        return if (current == 0) 0.0 else std.math.inf(f64);
+    }
+    const diff = @as(f64, @floatFromInt(current)) - @as(f64, @floatFromInt(baseline));
+    return (diff / @as(f64, @floatFromInt(baseline))) * 100.0;
+}
+
+/// Get median from sorted array of measurements
+fn getMedian(times: []u64) u64 {
+    const mid = times.len / 2;
+    if (times.len % 2 == 0) {
+        return (times[mid - 1] + times[mid]) / 2;
+    } else {
+        return times[mid];
+    }
+}
+
+/// Get 95th percentile from sorted array
+fn getP95(times: []u64) u64 {
+    const idx = @min(times.len - 1, (times.len * 95) / 100);
+    return times[idx];
+}
+
+/// Benchmark comparison function generation
+fn benchComparisonGeneration(allocator: std.mem.Allocator) !BenchResult {
+    var times: [NUM_ITERATIONS]u64 = undefined;
+    
+    for (&times) |*time| {
+        // Create test data
+        var items = try allocator.alloc(Item, SORT_SIZE);
+        defer allocator.free(items);
+        
+        var rng = std.Random.DefaultPrng.init(42);
+        const random = rng.random();
+        
+        for (items) |*item| {
+            item.tick = random.int(u32);
+            item.value = random.int(u64);
+        }
+        
+        var timer = try std.time.Timer.start();
+        
+        // Pass slice not array pointer
+        sortItems(items[0..]);
+        
+        time.* = timer.read();
+    }
+    
+    // Sort times to calculate median
+    std.sort.pdq(u64, times[0..], {}, std.sort.asc(u64));
+    
+    return BenchResult{
+        .name = "comparison_generation",
+        .median_ns = getMedian(times[0..]),
+        .p95_ns = getP95(times[0..]),
+        .min_ns = times[0],
+        .max_ns = times[times.len - 1],
+    };
+}
+
+/// Benchmark sort performance with different approaches
+fn benchSortPerformance(_: std.mem.Allocator) !BenchResult {
+    var times: [NUM_ITERATIONS]u64 = undefined;
+    
+    for (&times) |*time| {
+        // Create test data 
+        var data: [SORT_SIZE]u64 = undefined;
+        var rng = std.Random.DefaultPrng.init(12345);
+        const random = rng.random();
+        
+        for (&data) |*item| {
+            item.* = random.int(u64);
+        }
+        
+        var timer = try std.time.Timer.start();
+        
+        // Use slice not array pointer for sorting
+        std.sort.pdq(u64, data[0..], {}, std.sort.asc(u64));
+        
+        time.* = timer.read();
+    }
+    
+    // Sort times to calculate median
+    std.sort.pdq(u64, times[0..], {}, std.sort.asc(u64));
+    
+    return BenchResult{
+        .name = "sort_performance", 
+        .median_ns = getMedian(times[0..]),
+        .p95_ns = getP95(times[0..]),
+        .min_ns = times[0],
+        .max_ns = times[times.len - 1],
+    };
+}
+
+/// Load baseline results from file
+fn loadBaseline(allocator: std.mem.Allocator, path: []const u8) ![]BenchResult {
+    const file_content = std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024) catch |err| switch (err) {
+        // Return allocated empty slice so caller can free it
+        error.FileNotFound => return allocator.alloc(BenchResult, 0),
+        else => return err,
+    };
+    defer allocator.free(file_content);
+    
+    var results = containers.List(BenchResult).init(allocator);
+    defer results.deinit();
+    
+    var lines = std.mem.splitScalar(u8, file_content, '\n');
+    while (lines.next()) |line| {
+        if (line.len == 0) continue;
+        
+        var parts = std.mem.splitScalar(u8, line, ',');
+        const name = parts.next() orelse continue;
+        const median_str = parts.next() orelse continue;
+        const p95_str = parts.next() orelse continue;
+        const min_str = parts.next() orelse continue;
+        const max_str = parts.next() orelse continue;
+        
+        const result = BenchResult{
+            .name = try allocator.dupe(u8, name),
+            .median_ns = try std.fmt.parseInt(u64, median_str, 10),
+            .p95_ns = try std.fmt.parseInt(u64, p95_str, 10),
+            .min_ns = try std.fmt.parseInt(u64, min_str, 10),
+            .max_ns = try std.fmt.parseInt(u64, max_str, 10),
+        };
+        try results.append(result);
+    }
+    
+    return results.toOwnedSlice();
+}
+
+/// Save results as CSV
+fn saveBaseline(results: []const BenchResult, path: []const u8) !void {
+    const file = try std.fs.cwd().createFile(path, .{});
+    defer file.close();
+    
+    for (results) |result| {
+        try file.writer().print("{s},{d},{d},{d},{d}\n", .{
+            result.name,
+            result.median_ns,
+            result.p95_ns,
+            result.min_ns,
+            result.max_ns,
+        });
+    }
+}
+
+test "microbenchmark suite" {
+    const allocator = std.testing.allocator;
+    
+    // Gate baseline creation behind UPDATE_BENCH env var
+    const update = std.process.hasEnvVar(allocator, "UPDATE_BENCH") catch false;
+    
+    const baseline_path = "bench/baseline.csv";
+    
+    // Ensure bench directory exists if updating
+    if (update) {
+        try std.fs.cwd().makePath("bench");
+    }
+    
+    // Run benchmarks
+    const comparison_result = try benchComparisonGeneration(allocator);
+    const sort_result = try benchSortPerformance(allocator);
+    
+    const current_results = [_]BenchResult{ comparison_result, sort_result };
+    
+    // Load baseline
+    const baseline_results = try loadBaseline(allocator, baseline_path);
+    defer {
+        for (baseline_results) |result| {
+            allocator.free(result.name);
+        }
+        allocator.free(baseline_results);
+    }
+    
+    // Compare or create baseline
+    if (baseline_results.len == 0) {
+        if (!update) {
+            log.debug("No baseline found; set UPDATE_BENCH=1 to create baseline", .{});
+            return;
+        }
+        log.debug("Creating performance baseline", .{});
+        // FIXED: Pass slice not array pointer
+        try saveBaseline(current_results[0..], baseline_path);
+        return;
+    }
+    
+    // Compare against baseline
+    var regression_found = false;
+    for (current_results) |current| {
+        var baseline_found = false;
+        for (baseline_results) |baseline| {
+            if (std.mem.eql(u8, current.name, baseline.name)) {
+                baseline_found = true;
+                
+                // Use robust percentage calculation
+                const median_change = calculatePercentage(baseline.median_ns, current.median_ns);
+                const p95_change = calculatePercentage(baseline.p95_ns, current.p95_ns);
+                
+                log.debug("{s}: median {d}ns -> {d}ns ({d:.1}%), p95 {d}ns -> {d}ns ({d:.1}%)", .{
+                    current.name,
+                    baseline.median_ns,
+                    current.median_ns,
+                    median_change,
+                    baseline.p95_ns, 
+                    current.p95_ns,
+                    p95_change,
+                });
+                
+                // Flag regressions > 20%
+                if (median_change > 20.0 or p95_change > 20.0) {
+                    log.debug("⚠️  Performance regression detected in {s}", .{current.name});
+                    regression_found = true;
+                }
+                
+                break;
+            }
+        }
+        
+        if (!baseline_found) {
+            log.debug("New benchmark: {s} (median: {d}ns)", .{ current.name, current.median_ns });
+        }
+    }
+    
+    if (update) {
+        log.debug("Updating performance baseline", .{});
+        // FIXED: Pass slice not array pointer
+        try saveBaseline(current_results[0..], baseline_path);
+    } else if (regression_found) {
+        return error.PerformanceRegression;
+    }
+}

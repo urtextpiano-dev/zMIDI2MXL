@@ -321,7 +321,7 @@ pub fn benchmarkVoiceAllocation(allocator: std.mem.Allocator, note_count: usize)
     log.debug("Voice allocation benchmark:", .{});
     log.debug("  Notes: {}", .{note_count});
     log.debug("  Time: {d:.3}ms", .{elapsed_ms});
-    log.debug("  Per note: {d:.3}µs", .{elapsed_ms * 1000.0 / @as(f64, @floatFromInt(note_count))});
+    std.debug.print("  Per note: {d:.3}µs\n", .{elapsed_ms * 1000.0 / @as(f64, @floatFromInt(note_count))});
     
     // Verify O(n log n) complexity
     const expected_ops = @as(f64, @floatFromInt(note_count)) * std.math.log2(@as(f64, @floatFromInt(note_count)));

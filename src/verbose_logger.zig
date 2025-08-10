@@ -1,4 +1,5 @@
 const std = @import("std");
+const containers = @import("utils/containers.zig");
 const log_mod = @import("log.zig");
 
 /// Source location information for tracking where precision loss occurs
@@ -77,7 +78,7 @@ pub const StepID = struct {
 /// Implements TASK-VL-001 per VERBOSE_LOGGING_TASK_LIST.md lines 50-91
 pub const PrecisionMonitor = struct {
     enabled: bool,
-    warnings: std.ArrayList(PrecisionWarning),
+    warnings: containers.List(PrecisionWarning),
     threshold: f64 = 0.001, // 0.1% default threshold
     allocator: std.mem.Allocator,
     mutex: std.Thread.Mutex, // For thread-safety
@@ -96,7 +97,7 @@ pub const PrecisionMonitor = struct {
     pub fn init(allocator: std.mem.Allocator, enabled: bool) PrecisionMonitor {
         return .{
             .enabled = enabled,
-            .warnings = std.ArrayList(PrecisionWarning).init(allocator),
+            .warnings = containers.List(PrecisionWarning).init(allocator),
             .allocator = allocator,
             .mutex = std.Thread.Mutex{},
         };
@@ -500,7 +501,7 @@ pub const PipelineSteps = enum(u32) {
 /// Implements TASK-VL-007 per VERBOSE_LOGGING_TASK_LIST.md lines 315-325
 pub const StepRegistry = struct {
     /// HashMap tracking which steps have been executed
-    executed_steps: std.AutoHashMap(PipelineSteps, StepExecution),
+    executed_steps: containers.AutoMap(PipelineSteps, StepExecution),
     /// Allocator for the registry
     allocator: std.mem.Allocator,
     /// Mutex for thread-safe step marking
@@ -528,7 +529,7 @@ pub const StepRegistry = struct {
     /// Initialize the step registry
     pub fn init(allocator: std.mem.Allocator) StepRegistry {
         return .{
-            .executed_steps = std.AutoHashMap(PipelineSteps, StepExecution).init(allocator),
+            .executed_steps = containers.AutoMap(PipelineSteps, StepExecution).init(allocator),
             .allocator = allocator,
             .mutex = std.Thread.Mutex{},
             .start_time = @as(i64, @intCast(std.time.nanoTimestamp())),
@@ -1095,7 +1096,7 @@ pub const VerboseLogger = struct {
         if (!self.precision_monitor.enabled or self.precision_monitor.warnings.items.len == 0) return;
         
         // Group warnings by operation type
-        var op_groups = std.StringHashMap(std.ArrayList(PrecisionMonitor.PrecisionWarning)).init(self.allocator);
+        var op_groups = containers.StrMap(containers.List(PrecisionMonitor.PrecisionWarning)).init(self.allocator);
         defer {
             var it = op_groups.iterator();
             while (it.next()) |entry| {
@@ -1108,7 +1109,7 @@ pub const VerboseLogger = struct {
         for (self.precision_monitor.warnings.items) |precision_warning| {
             const result = op_groups.getOrPut(precision_warning.operation) catch continue;
             if (!result.found_existing) {
-                result.value_ptr.* = std.ArrayList(PrecisionMonitor.PrecisionWarning).init(self.allocator);
+                result.value_ptr.* = containers.List(PrecisionMonitor.PrecisionWarning).init(self.allocator);
             }
             result.value_ptr.append(precision_warning) catch continue;
         }
@@ -1388,7 +1389,7 @@ pub const VerboseLogger = struct {
         var fba = std.heap.FixedBufferAllocator.init(&buffer);
         const temp_allocator = fba.allocator();
         
-        var string = std.ArrayList(u8).init(temp_allocator);
+        var string = containers.List(u8).init(temp_allocator);
         defer string.deinit();
         
         self.step_registry.generateReport(string.writer()) catch {

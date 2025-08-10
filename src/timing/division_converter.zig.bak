@@ -381,7 +381,7 @@ test "DivisionConverter - performance benchmark" {
     const duration_per_conversion_ns = duration_ns / iterations;
     const duration_per_conversion_us = @as(f64, @floatFromInt(duration_per_conversion_ns)) / 1000.0;
     
-    log.debug("Division conversion time: {d:.3} μs per conversion (averaged over {} iterations)", 
+    std.debug.print("Division conversion time: {d:.3} μs per conversion (averaged over {} iterations)\n", 
         .{ duration_per_conversion_us, iterations });
     
     // Verify < 1μs per conversion performance target per TASK-023

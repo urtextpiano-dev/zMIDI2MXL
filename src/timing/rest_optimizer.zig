@@ -16,6 +16,7 @@
 //! Reference: musical_intelligence_algorithms.md Section 7.4 lines 1274-1307
 
 const std = @import("std");
+const containers = @import("../utils/containers.zig");
 const log = std.log.scoped(.rest_optimizer);
 
 /// Error types for rest optimization operations
@@ -173,7 +174,7 @@ pub const RestOptimizer = struct {
     /// Optimize rests with beam group awareness for educational processing
     /// This respects beam group boundaries during rest consolidation
     pub fn optimizeRestsWithBeamAwareness(self: *RestOptimizer, gaps: []const Gap, time_sig: TimeSignature, beam_constraints: ?[]const BeamGroupConstraint) ![]Rest {
-        var result = std.ArrayList(Rest).init(self.allocator);
+        var result = containers.List(Rest).init(self.allocator);
         errdefer result.deinit();
         
         // Process each gap independently with beam awareness
@@ -199,7 +200,7 @@ pub const RestOptimizer = struct {
             return try self.allocator.alloc(Rest, 0); // No rest for tiny gaps
         }
         
-        var rests = std.ArrayList(Rest).init(self.allocator);
+        var rests = containers.List(Rest).init(self.allocator);
         errdefer rests.deinit();
         
         var remaining_duration = gap.duration;
@@ -253,7 +254,7 @@ pub const RestOptimizer = struct {
             return try self.allocator.alloc(Rest, 0); // No rest for tiny gaps
         }
         
-        var rests = std.ArrayList(Rest).init(self.allocator);
+        var rests = containers.List(Rest).init(self.allocator);
         errdefer rests.deinit();
         
         var remaining_duration = gap.duration;
@@ -693,7 +694,7 @@ pub const RestOptimizer = struct {
     fn consolidateRestsWithBeamAwareness(self: *RestOptimizer, rests: []const Rest, time_sig: TimeSignature, beam_constraints: ?[]const BeamGroupConstraint) ![]Rest {
         if (rests.len == 0) return try self.allocator.alloc(Rest, 0);
         
-        var consolidated = std.ArrayList(Rest).init(self.allocator);
+        var consolidated = containers.List(Rest).init(self.allocator);
         errdefer consolidated.deinit();
         
         var i: usize = 0;
@@ -739,7 +740,7 @@ pub const RestOptimizer = struct {
     fn consolidateRests(self: *RestOptimizer, rests: []const Rest, time_sig: TimeSignature) ![]Rest {
         if (rests.len == 0) return try self.allocator.alloc(Rest, 0);
         
-        var consolidated = std.ArrayList(Rest).init(self.allocator);
+        var consolidated = containers.List(Rest).init(self.allocator);
         errdefer consolidated.deinit();
         
         var i: usize = 0;

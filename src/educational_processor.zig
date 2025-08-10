@@ -16,6 +16,8 @@
 //! - Proper error handling and fallback mechanisms
 
 const std = @import("std");
+const containers = @import("utils/containers.zig");
+const log = @import("utils/log.zig");
 
 // Core infrastructure
 const arena_mod = @import("memory/arena.zig");
@@ -250,13 +252,13 @@ pub const EducationalProcessor = struct {
             if (timed_notes.len > self.config.performance.complexity_threshold) {
                 const msg = "File too complex, disabling educational features to prevent system hang";
                 vlogger.parent.pipelineStepFailed(.EDU_START, msg, "Notes: {}, Threshold: {}", .{ timed_notes.len, self.config.performance.complexity_threshold });
-                std.debug.print("SAFETY: File too complex ({d} notes), disabling educational features to prevent system hang\n", .{timed_notes.len});
+                log.warn("File too complex ({d} notes), disabling educational features to prevent system hang", .{timed_notes.len});
                 return EducationalProcessingError.SystemStabilityRisk;
             }
             if (timed_notes.len > self.config.performance.max_notes_per_batch) {
                 const msg = "Batch too large, refusing to process";
                 vlogger.parent.pipelineStepFailed(.EDU_START, msg, "Notes: {}, Max batch: {}", .{ timed_notes.len, self.config.performance.max_notes_per_batch });
-                std.debug.print("SAFETY: Batch too large ({d} notes), refusing to process\n", .{timed_notes.len});
+                log.warn("Batch too large ({d} notes), refusing to process", .{timed_notes.len});
                 return EducationalProcessingError.SystemStabilityRisk;
             }
         }
@@ -312,7 +314,7 @@ pub const EducationalProcessor = struct {
                 const max_time_ns = @as(i64, @intCast(self.config.performance.max_total_processing_time_seconds)) * std.time.ns_per_s;
                 if (elapsed_time > max_time_ns) {
                     vlogger.parent.pipelineStepFailed(.EDU_PERFORMANCE_MONITORING, "Processing timeout", "Elapsed: {}ns, Max: {}ns", .{ elapsed_time, max_time_ns });
-                    std.debug.print("SAFETY: Processing timeout ({d}s), aborting to prevent system hang\n", .{self.config.performance.max_total_processing_time_seconds});
+                    log.warn("Processing timeout ({d}s), aborting to prevent system hang", .{self.config.performance.max_total_processing_time_seconds});
                     return EducationalProcessingError.ProcessingTimeout;
                 }
             }
@@ -586,7 +588,7 @@ pub const EducationalProcessor = struct {
                 // CRITICAL SAFETY: Prevent infinite loops
                 loop_iterations += 1;
                 if (loop_iterations > self.config.performance.max_iterations_per_loop) {
-                    std.debug.print("SAFETY: Too many iterations in tuplet detection loop, breaking to prevent hang\n", .{});
+                    log.warn("Too many iterations in tuplet detection loop, breaking to prevent hang", .{});
                     break;
                 }
 
@@ -600,7 +602,7 @@ pub const EducationalProcessor = struct {
                     // CRITICAL SAFETY: Prevent infinite inner loops
                     inner_iterations += 1;
                     if (inner_iterations > 1000) {
-                        std.debug.print("SAFETY: Too many inner iterations in tuplet detection, breaking\n", .{});
+                        log.warn("Too many inner iterations in tuplet detection, breaking", .{});
                         break;
                     }
                 }
@@ -750,7 +752,7 @@ pub const EducationalProcessor = struct {
             // CRITICAL SAFETY: Prevent infinite loops
             beam_loop_iterations += 1;
             if (beam_loop_iterations > self.config.performance.max_iterations_per_loop) {
-                std.debug.print("SAFETY: Too many iterations in beam grouping loop, breaking to prevent hang\n", .{});
+                log.warn("Too many iterations in beam grouping loop, breaking to prevent hang", .{});
                 break;
             }
 
@@ -774,7 +776,7 @@ pub const EducationalProcessor = struct {
                 // CRITICAL SAFETY: Prevent infinite inner loops
                 beam_inner_iterations += 1;
                 if (beam_inner_iterations > 1000) {
-                    std.debug.print("SAFETY: Too many inner iterations in beam grouping, breaking\n", .{});
+                    log.warn("Too many inner iterations in beam grouping, breaking", .{});
                     break;
                 }
                 const next = enhanced_notes[j].getBaseNote();
@@ -952,7 +954,7 @@ pub const EducationalProcessor = struct {
             // CRITICAL SAFETY: Prevent infinite loops
             rest_loop_iterations += 1;
             if (rest_loop_iterations > self.config.performance.max_iterations_per_loop) {
-                std.debug.print("SAFETY: Too many iterations in rest optimization loop, breaking to prevent hang\n", .{});
+                log.warn("Too many iterations in rest optimization loop, breaking to prevent hang", .{});
                 break;
             }
 
@@ -979,7 +981,7 @@ pub const EducationalProcessor = struct {
                 // CRITICAL SAFETY: Prevent infinite inner loops
                 rest_inner_iterations += 1;
                 if (rest_inner_iterations > 1000) {
-                    std.debug.print("SAFETY: Too many inner iterations in rest optimization, breaking\n", .{});
+                    log.warn("Too many inner iterations in rest optimization, breaking", .{});
                     break;
                 }
 
@@ -1356,7 +1358,7 @@ pub const EducationalProcessor = struct {
     fn groupNotesIntoMeasures(self: *EducationalProcessor, enhanced_notes: []enhanced_note.EnhancedTimedNote) ![]MeasureInfo {
         if (enhanced_notes.len == 0) return &[_]MeasureInfo{};
 
-        var measures = std.ArrayList(MeasureInfo).init(self.arena.allocator());
+        var measures = containers.List(MeasureInfo).init(self.arena.allocator());
         defer measures.deinit();
 
         // Heuristic: assume 4/4 measures of 1920 ticks (4 * 480)
@@ -1486,7 +1488,7 @@ pub const EducationalProcessor = struct {
                     .note_type = note_types[idx],
                     .beat_position = @as(f64, @floatFromInt(idx - start_index)) / @as(f64, @floatFromInt(size)),
                     .can_beam = true,
-                    .beams = std.ArrayList(beam_grouper.BeamInfo).init(self.arena.allocator()),
+                    .beams = containers.List(beam_grouper.BeamInfo).init(self.arena.allocator()),
                 });
             }
         }
@@ -1524,7 +1526,7 @@ pub const EducationalProcessor = struct {
             is_tuplet: bool,
         };
 
-        var segments = std.ArrayList(Segment).init(self.arena.allocator());
+        var segments = containers.List(Segment).init(self.arena.allocator());
         defer segments.deinit();
 
         var cur_start: usize = 0;
@@ -1558,7 +1560,7 @@ pub const EducationalProcessor = struct {
         }
 
         // Emit groups: tuplet segments first (to match your previous ordering), then non-tuplet
-        var out = std.ArrayList(beam_grouper.BeamGroup).init(self.arena.allocator());
+        var out = containers.List(beam_grouper.BeamGroup).init(self.arena.allocator());
         defer out.deinit();
 
         // Tuplet segments
@@ -1724,7 +1726,7 @@ pub const EducationalProcessor = struct {
         start_tick: u32,
         end_tick: u32,
         tuplet_ref: ?*const tuplet_detector.Tuplet,
-        note_indices: std.ArrayList(usize),
+        note_indices: containers.List(usize),
 
         pub fn deinit(self: *TupletSpan) void {
             self.note_indices.deinit();
@@ -1744,7 +1746,7 @@ pub const EducationalProcessor = struct {
         self: *EducationalProcessor,
         enhanced_notes: []enhanced_note.EnhancedTimedNote,
     ) ![]TupletSpan {
-        var spans = std.ArrayList(TupletSpan).init(self.arena.allocator());
+        var spans = containers.List(TupletSpan).init(self.arena.allocator());
         defer spans.deinit();
         errdefer {
             // Ensure inner arrays are cleaned if we fail mid-way.
@@ -1773,7 +1775,7 @@ pub const EducationalProcessor = struct {
                             .start_tick = note.base_note.start_tick,
                             .end_tick = note.base_note.start_tick + note.base_note.duration,
                             .tuplet_ref = tuplet,
-                            .note_indices = std.ArrayList(usize).init(self.arena.allocator()),
+                            .note_indices = containers.List(usize).init(self.arena.allocator()),
                         };
                         try new_span.note_indices.append(i);
                         try spans.append(new_span);
@@ -1797,9 +1799,9 @@ pub const EducationalProcessor = struct {
 
     /// Build beam groups from enhanced notes
     fn buildBeamGroups(self: *EducationalProcessor, enhanced_notes: []enhanced_note.EnhancedTimedNote) ![]BeamGroupInfo {
-        var groups = std.ArrayList(BeamGroupInfo).init(self.arena.allocator());
+        var groups = containers.List(BeamGroupInfo).init(self.arena.allocator());
         defer groups.deinit();
-        var group_map = std.AutoHashMap(u32, std.ArrayList(usize)).init(self.arena.allocator());
+        var group_map = containers.AutoMap(u32, containers.List(usize)).init(self.arena.allocator());
         defer {
             var it = group_map.iterator();
             while (it.next()) |entry| {
@@ -1814,7 +1816,7 @@ pub const EducationalProcessor = struct {
                 if (info.beam_group_id) |group_id| {
                     var entry = try group_map.getOrPut(group_id);
                     if (!entry.found_existing) {
-                        entry.value_ptr.* = std.ArrayList(usize).init(self.arena.allocator());
+                        entry.value_ptr.* = containers.List(usize).init(self.arena.allocator());
                     }
                     try entry.value_ptr.append(i);
                 }
@@ -2158,7 +2160,7 @@ pub const EducationalProcessor = struct {
     const RestSpan = struct {
         start_tick: u32,
         end_tick: u32,
-        note_indices: std.ArrayList(usize),
+        note_indices: containers.List(usize),
         is_optimized_rest: bool,
 
         pub fn deinit(self: *RestSpan) void {
@@ -2171,7 +2173,7 @@ pub const EducationalProcessor = struct {
         self: *EducationalProcessor,
         enhanced_notes: []enhanced_note.EnhancedTimedNote,
     ) ![]RestSpan {
-        var spans = std.ArrayList(RestSpan).init(self.arena.allocator());
+        var spans = containers.List(RestSpan).init(self.arena.allocator());
         defer spans.deinit();
         errdefer {
             for (spans.items) |*span| span.deinit();
@@ -2192,7 +2194,7 @@ pub const EducationalProcessor = struct {
                 var new_span = RestSpan{
                     .start_tick = note.base_note.start_tick,
                     .end_tick = note.base_note.start_tick + note.base_note.duration,
-                    .note_indices = std.ArrayList(usize).init(self.arena.allocator()),
+                    .note_indices = containers.List(usize).init(self.arena.allocator()),
                     .is_optimized_rest = if (note.rest_info) |info| info.is_optimized_rest else false,
                 };
                 try new_span.note_indices.append(i);
@@ -2212,7 +2214,7 @@ pub const EducationalProcessor = struct {
                 var new_span = RestSpan{
                     .start_tick = note.base_note.start_tick,
                     .end_tick = note_end,
-                    .note_indices = std.ArrayList(usize).init(self.arena.allocator()),
+                    .note_indices = containers.List(usize).init(self.arena.allocator()),
                     .is_optimized_rest = if (note.rest_info) |info| info.is_optimized_rest else false,
                 };
                 try new_span.note_indices.append(i);
@@ -2707,7 +2709,7 @@ pub const EducationalProcessor = struct {
             return gaps;
         }
 
-        var gaps = std.ArrayList(rest_optimizer.Gap).init(self.arena.allocator());
+        var gaps = containers.List(rest_optimizer.Gap).init(self.arena.allocator());
         defer gaps.deinit();
 
         // Sort notes by start time to detect gaps
@@ -2767,7 +2769,7 @@ pub const EducationalProcessor = struct {
 
     /// Create beam group constraints from enhanced notes for rest optimization
     fn createBeamGroupConstraints(self: *EducationalProcessor, notes: []enhanced_note.EnhancedTimedNote) ![]rest_optimizer.BeamGroupConstraint {
-        var constraints = std.ArrayList(rest_optimizer.BeamGroupConstraint).init(self.arena.allocator());
+        var constraints = containers.List(rest_optimizer.BeamGroupConstraint).init(self.arena.allocator());
         defer constraints.deinit();
 
         var current_group_id: ?u32 = null;
@@ -3191,7 +3193,7 @@ test "TASK-INT-012: beam group integrity validation" {
     var splitting_rest = EducationalProcessor.RestSpan{
         .start_tick = 240,
         .end_tick = 360,
-        .note_indices = std.ArrayList(usize).init(educational_arena.allocator()),
+        .note_indices = containers.List(usize).init(educational_arena.allocator()),
         .is_optimized_rest = true,
     };
     defer splitting_rest.deinit();

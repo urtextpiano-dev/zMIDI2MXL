@@ -1,5 +1,8 @@
 const std = @import("std");
+const containers = @import("../utils/containers.zig");
 const TimedNote = @import("../timing.zig").TimedNote;
+const comparison = @import("../utils/comparison.zig");
+const t = @import("../test_utils.zig");
 
 /// Minimal chord detector - EXACT timing only (CDR-2.2) with CDR-2.5 optimizations
 pub const MinimalChordDetector = struct {
@@ -25,13 +28,13 @@ pub const MinimalChordDetector = struct {
         const sorted = if (is_sorted) notes else blk: {
             const copy = try self.allocator.alloc(TimedNote, notes.len);
             @memcpy(copy, notes);
-            std.sort.pdq(TimedNote, copy, {}, compareByStartTick);
+            std.sort.pdq(TimedNote, copy, {}, comparison.compareByField(TimedNote, "start_tick", .asc));
             break :blk copy;
         };
         defer if (!is_sorted) self.allocator.free(sorted);
 
         // Pre-allocate groups array with estimated size
-        var groups = try std.ArrayList(ChordGroup).initCapacity(self.allocator, notes.len / 2);
+        var groups = try containers.List(ChordGroup).initCapacity(self.allocator, notes.len / 2);
         defer groups.deinit();
 
         var i: usize = 0;
@@ -47,7 +50,7 @@ pub const MinimalChordDetector = struct {
                 // Valid chord (including single notes): copy + sort by pitch
                 const owned = try self.allocator.alloc(TimedNote, chord_slice.len);
                 @memcpy(owned, chord_slice);
-                std.sort.pdq(TimedNote, owned, {}, compareByPitch);
+                std.sort.pdq(TimedNote, owned, {}, comparison.compareByField(TimedNote, "note", .asc));
 
                 const tracks = try collectTracksFast(self.allocator, owned);
 
@@ -107,12 +110,6 @@ pub const MinimalChordDetector = struct {
         return (max_p - min_p) <= 24;
     }
 
-    fn compareByStartTick(_: void, a: TimedNote, b: TimedNote) bool {
-        return a.start_tick < b.start_tick;
-    }
-    fn compareByPitch(_: void, a: TimedNote, b: TimedNote) bool {
-        return a.note < b.note;
-    }
 
     fn determineStaff(notes: []const TimedNote) u8 {
         for (notes) |n| if (n.note < 60) return 2;
@@ -134,10 +131,10 @@ pub const MinimalChordDetector = struct {
         const tracks = try allocator.alloc(u8, count);
 
         var idx: usize = 0;
-        var t: u4 = 0;
-        while (t < 16) : (t += 1) {
-            if (((mask >> t) & 1) == 1) {
-                tracks[idx] = @intCast(t); // context gives u8
+        var track_idx: u4 = 0;
+        while (track_idx < 16) : (track_idx += 1) {
+            if (((mask >> track_idx) & 1) == 1) {
+                tracks[idx] = @intCast(track_idx); // context gives u8
                 idx += 1;
             }
         }
@@ -170,9 +167,9 @@ test "CDR-2.2: Sequential bass line NOT grouped (MVS-2.4 fix)" {
     }
 
     // MUST create 4 separate groups
-    try std.testing.expectEqual(@as(usize, 4), groups.len);
+    try t.expectEq(4, groups.len);
     for (groups) |group| {
-        try std.testing.expectEqual(@as(usize, 1), group.notes.len);
+        try t.expectEq(1, group.notes.len);
     }
 }
 
@@ -196,8 +193,8 @@ test "CDR-2.2: Legitimate chord detected" {
     }
 
     // Should create 1 chord group with 3 notes
-    try std.testing.expectEqual(@as(usize, 1), groups.len);
-    try std.testing.expectEqual(@as(usize, 3), groups[0].notes.len);
+    try t.expectEq(1, groups.len);
+    try t.expectEq(3, groups[0].notes.len);
 }
 
 test "CDR-2.2: NO tolerance (1 tick difference = separate)" {
@@ -219,7 +216,7 @@ test "CDR-2.2: NO tolerance (1 tick difference = separate)" {
     }
 
     // MUST create 2 separate groups
-    try std.testing.expectEqual(@as(usize, 2), groups.len);
+    try t.expectEq(2, groups.len);
 }
 
 test "CDR-2.2: Wide range fail-safe" {
@@ -241,7 +238,7 @@ test "CDR-2.2: Wide range fail-safe" {
     }
 
     // Fail-safe: 2 separate groups
-    try std.testing.expectEqual(@as(usize, 2), groups.len);
+    try t.expectEq(2, groups.len);
 }
 
 test "CDR-2.2: Duplicate pitch fail-safe" {
@@ -263,5 +260,5 @@ test "CDR-2.2: Duplicate pitch fail-safe" {
     }
 
     // Fail-safe: 2 separate groups
-    try std.testing.expectEqual(@as(usize, 2), groups.len);
+    try t.expectEq(2, groups.len);
 }

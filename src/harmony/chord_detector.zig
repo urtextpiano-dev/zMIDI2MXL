@@ -11,8 +11,10 @@
 //! - MusicXML 4.0 specification for chord notation
 
 const std = @import("std");
+const containers = @import("../utils/containers.zig");
 const timing = @import("../timing.zig");
 const TimedNote = timing.TimedNote;
+const t = @import("../test_utils.zig");
 
 /// Error types for chord detection operations
 pub const ChordDetectorError = error{
@@ -80,13 +82,13 @@ pub const ChordDetector = struct {
         std.sort.pdq(TimedNote, sorted_notes, {}, compareByStartTime);
         
         // Temporary storage for chord groups
-        var groups = std.ArrayList(ChordGroup).init(self.allocator);
+        var groups = containers.List(ChordGroup).init(self.allocator);
         defer groups.deinit();
         
         // Process notes and group simultaneous ones
         var i: usize = 0;
         while (i < sorted_notes.len) {
-            var chord_notes = std.ArrayList(TimedNote).init(self.allocator);
+            var chord_notes = containers.List(TimedNote).init(self.allocator);
             errdefer chord_notes.deinit();
             
             const base_time = sorted_notes[i].start_tick;
@@ -133,7 +135,7 @@ pub const ChordDetector = struct {
         }
         
         // Use a temporary set to collect unique tracks
-        var track_set = std.AutoHashMap(u8, void).init(self.allocator);
+        var track_set = containers.AutoMap(u8, void).init(self.allocator);
         defer track_set.deinit();
         
         // Collect unique track numbers
@@ -205,11 +207,11 @@ test "detect single notes as individual chords" {
     }
     
     // Should create 3 separate chord groups
-    try std.testing.expectEqual(@as(usize, 3), chord_groups.len);
+    try t.expectEq(3, chord_groups.len);
     
     // Each group should have one note
     for (chord_groups) |group| {
-        try std.testing.expectEqual(@as(usize, 1), group.notes.len);
+        try t.expectEq(1, group.notes.len);
     }
 }
 
@@ -233,15 +235,15 @@ test "detect simultaneous notes as chord" {
     }
     
     // Should create 1 chord group
-    try std.testing.expectEqual(@as(usize, 1), chord_groups.len);
+    try t.expectEq(1, chord_groups.len);
     
     // The group should have 3 notes
-    try std.testing.expectEqual(@as(usize, 3), chord_groups[0].notes.len);
+    try t.expectEq(3, chord_groups[0].notes.len);
     
     // Notes should be sorted by pitch
-    try std.testing.expectEqual(@as(u8, 60), chord_groups[0].notes[0].note);
-    try std.testing.expectEqual(@as(u8, 64), chord_groups[0].notes[1].note);
-    try std.testing.expectEqual(@as(u8, 67), chord_groups[0].notes[2].note);
+    try t.expectEq(60, chord_groups[0].notes[0].note);
+    try t.expectEq(64, chord_groups[0].notes[1].note);
+    try t.expectEq(67, chord_groups[0].notes[2].note);
 }
 
 test "detect notes within tolerance as chord" {
@@ -264,8 +266,8 @@ test "detect notes within tolerance as chord" {
     }
     
     // Should create 1 chord group
-    try std.testing.expectEqual(@as(usize, 1), chord_groups.len);
-    try std.testing.expectEqual(@as(usize, 3), chord_groups[0].notes.len);
+    try t.expectEq(1, chord_groups.len);
+    try t.expectEq(3, chord_groups[0].notes.len);
 }
 
 test "staff assignment for bass notes" {
@@ -288,7 +290,7 @@ test "staff assignment for bass notes" {
     }
     
     // Should assign to bass staff (2)
-    try std.testing.expectEqual(@as(u8, 2), chord_groups[0].staff_assignment);
+    try t.expectEq(2, chord_groups[0].staff_assignment);
 }
 
 test "complex chord pattern" {
@@ -317,14 +319,14 @@ test "complex chord pattern" {
     }
     
     // Should create 3 chord groups
-    try std.testing.expectEqual(@as(usize, 3), chord_groups.len);
+    try t.expectEq(3, chord_groups.len);
     
     // First group: 3 notes
-    try std.testing.expectEqual(@as(usize, 3), chord_groups[0].notes.len);
+    try t.expectEq(3, chord_groups[0].notes.len);
     
     // Second group: 1 note
-    try std.testing.expectEqual(@as(usize, 1), chord_groups[1].notes.len);
+    try t.expectEq(1, chord_groups[1].notes.len);
     
     // Third group: 2 notes
-    try std.testing.expectEqual(@as(usize, 2), chord_groups[2].notes.len);
+    try t.expectEq(2, chord_groups[2].notes.len);
 }

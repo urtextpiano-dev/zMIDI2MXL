@@ -113,7 +113,7 @@ pub fn main() !void {
     defer arena.deinit();
     
     var processor = EducationalProcessor{
-        .arena = &arena,
+        .arena = &sa.arena,
     };
     
     // Test Case 1: No rest spans - should return true
@@ -221,7 +221,7 @@ test "validateBeamGroupIntegrity - no rest spans" {
     defer arena.deinit();
     
     var processor = EducationalProcessor{
-        .arena = &arena,
+        .arena = &sa.arena,
     };
     
     var notes = try arena.allocator().alloc(EnhancedTimedNote, 2);
@@ -246,7 +246,7 @@ test "validateBeamGroupIntegrity - rest breaks continuity" {
     defer arena.deinit();
     
     var processor = EducationalProcessor{
-        .arena = &arena,
+        .arena = &sa.arena,
     };
     
     var notes = try arena.allocator().alloc(EnhancedTimedNote, 3);
@@ -278,7 +278,7 @@ test "validateBeamGroupIntegrity - rest outside group" {
     defer arena.deinit();
     
     var processor = EducationalProcessor{
-        .arena = &arena,
+        .arena = &sa.arena,
     };
     
     var notes = try arena.allocator().alloc(EnhancedTimedNote, 2);
@@ -309,7 +309,7 @@ test "validateBeamGroupIntegrity - no beamed notes after rest" {
     defer arena.deinit();
     
     var processor = EducationalProcessor{
-        .arena = &arena,
+        .arena = &sa.arena,
     };
     
     var notes = try arena.allocator().alloc(EnhancedTimedNote, 3);
@@ -341,7 +341,7 @@ test "validateBeamGroupIntegrity - multiple rest spans" {
     defer arena.deinit();
     
     var processor = EducationalProcessor{
-        .arena = &arena,
+        .arena = &sa.arena,
     };
     
     var notes = try arena.allocator().alloc(EnhancedTimedNote, 5);
